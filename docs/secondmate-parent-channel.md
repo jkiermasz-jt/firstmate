@@ -40,14 +40,10 @@ The pending-reply guard may restate only the correlated line from a local mate's
 Other correlated mate-home status lines remain wrong-home evidence, while a remote home's routed `state/parent-replies.status` is already the parent channel and is not classified as wrong-home.
 A missed-reply escalation includes the complete first sighting path and line number in readable shell-escaped form.
 
-Persistent-secondmate liveness is also reconciled before a status log can be
-treated as current: a confirmed dead or missing endpoint cannot remain
-`working` merely because its readable shell or stale status log survives. An
-active routed reply on that endpoint is escalated as
-`pending-reply-agent-stopped`, so the parent receives a durable terminal
-boundary instead of waiting on a child that can no longer report. This guard is
-harness-neutral and applies to every persistent secondmate; it is covered by
-`tests/fm-crew-state.test.sh` and `tests/fm-pending-reply.test.sh`.
+Persistent-secondmate liveness is reconciled before a status log is treated as current, so a confirmed dead or missing endpoint cannot remain `working` merely because its readable shell or stale status log survives.
+Only a recovery-grade `dead` or `missing` result changes that conclusion; ambiguous, unreadable, and unverified endpoints keep their existing conservative path.
+An unresolved routed reply on a confirmed stopped endpoint is escalated as `pending-reply-agent-stopped`, so the parent receives a durable terminal boundary instead of waiting on a child that can no longer report.
+`tests/fm-crew-state.test.sh` and `tests/fm-pending-reply.test.sh` cover this boundary.
 
 ## What is deliberately not built
 
