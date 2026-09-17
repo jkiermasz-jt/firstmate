@@ -576,12 +576,14 @@ print_canonical_activity() {
        | (.decisions_open // []) as $decisions
        | (.holds // []) as $holds
        | (.omitted // []) as $omitted
+       | ((.state == "captain_decision") or
+          any($decisions[]?; .verb == "needs-decision" or .verb == "captain-hold")) as $captain_decision
        | [
            (if ($active | length) > 0 then
               $active | map("active: \(.id) state=\(.state) source=\(.source) doing=\(.doing // .state)")
             else [] end),
            (if ($decisions | length) > 0 then
-              ["current activity: captain decision required"] +
+              [(if $captain_decision then "current activity: captain decision required" else "current activity: decisions open" end)] +
               ($decisions | map("decision: \(.id) \(.summary // .reason // .verb)"))
             else [] end),
            (if ($holds | length) > 0 then

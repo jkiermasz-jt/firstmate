@@ -1386,6 +1386,9 @@ case "${FM_SNAPSHOT_CASE:-decision}" in
   hold)
     printf '%s\n' '{"schema":"fm-secondmate-home-summary.v1","valid":true,"state":"externally_held","active_children":[],"decisions_open":[],"holds":[{"id":"goal-4","reason":"Waiting for vendor access"}]}'
     ;;
+  blocked)
+    printf '%s\n' '{"schema":"fm-secondmate-home-summary.v1","valid":true,"state":"active_child_work","active_children":[],"decisions_open":[{"id":"goal-6","summary":"Waiting on blocker","verb":"blocked"}],"holds":[]}'
+    ;;
 esac
 SH
   chmod +x "$snapshot"
@@ -1415,6 +1418,12 @@ SH
     "the canonical hold was not rendered"
   assert_not_contains "$out" "no active child work proven" \
     "the canonical hold was reduced to an empty child-work state"
+
+  out=$(FM_SNAPSHOT_CASE=blocked FM_FLEET_SNAPSHOT_BIN="$snapshot" run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "current activity: decisions open" \
+    "a blocked decision entry was not given a neutral activity label"
+  assert_not_contains "$out" "current activity: captain decision required" \
+    "a blocked decision entry was mislabelled as a captain decision"
   pass "session start renders canonical decision and hold activity surfaces"
 }
 

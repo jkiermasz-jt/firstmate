@@ -277,6 +277,67 @@ test_raw_secondmate_does_not_arm_busy_state() {
   pass "fm-spawn: a raw secondmate launch stays outside semantic busy-state wiring"
 }
 
+test_raw_secondmate_relaunch_retires_prior_busy_state() {
+  local world home fakebin launchlog out status
+  world="$TMP_ROOT/raw-relaunch-secondmate"
+  home="$world/sm"
+  mkdir -p "$world/home/state" "$world/home/data" "$world/home/config" "$home/bin" "$home/data"
+  printf '# Firstmate\n' > "$home/AGENTS.md"
+  printf 'sm\n' > "$home/.fm-secondmate-home"
+  printf 'charter\n' > "$home/data/charter.md"
+  fakebin=$(make_spawn_fakebin "$world/fake" claude)
+  make_fake_omp "$fakebin"
+  launchlog="$world/launch.log"
+  : > "$launchlog"
+
+  out=$(PATH="$fakebin:$PATH" TMUX='fake,1,0' FM_BACKEND=tmux CLAUDECODE=1 \
+    FM_ROOT_OVERRIDE='' FM_HOME="$world/home" \
+    FM_STATE_OVERRIDE="$world/home/state" FM_DATA_OVERRIDE="$world/home/data" \
+    FM_PROJECTS_OVERRIDE="$world/home/projects" FM_CONFIG_OVERRIDE="$world/home/config" \
+    FM_SPAWN_NO_GUARD=1 FM_FAKE_LAUNCH_LOG="$launchlog" \
+    "$ROOT/bin/fm-spawn.sh" sm "$home" omp --secondmate 2>&1)
+  status=$?
+  expect_code 0 "$status" "the semantic secondmate predecessor should launch: $out"
+  assert_present "$world/home/state/sm.busy-gen" "the semantic predecessor must arm a busy generation"
+
+  : > "$launchlog"
+  cat > "$fakebin/tmux" <<'SH'
+#!/usr/bin/env bash
+set -u
+case "$*" in
+  *"#{pane_current_path}"*) printf '%s\n' "${FM_FAKE_PANE_PATH:-}"; exit 0 ;;
+  *"#{pane_current_command}"*) printf 'zsh\n'; exit 0 ;;
+esac
+case "${1:-}" in
+  display-message) printf 'firstmate\n' ;;
+  list-windows) printf 'fm-sm\n' ;;
+  send-keys)
+    if [ -n "${FM_FAKE_LAUNCH_LOG:-}" ]; then
+      prev=
+      for arg in "$@"; do
+        if [ "$prev" = -l ]; then printf '%s\n' "$arg" >> "$FM_FAKE_LAUNCH_LOG"; fi
+        prev=$arg
+      done
+    fi
+    ;;
+esac
+exit 0
+SH
+  chmod +x "$fakebin/tmux"
+  out=$(PATH="$fakebin:$PATH" TMUX='fake,1,0' FM_BACKEND=tmux CLAUDECODE=1 \
+    FM_ROOT_OVERRIDE='' FM_HOME="$world/home" \
+    FM_STATE_OVERRIDE="$world/home/state" FM_DATA_OVERRIDE="$world/home/data" \
+    FM_PROJECTS_OVERRIDE="$world/home/projects" FM_CONFIG_OVERRIDE="$world/home/config" \
+    FM_SPAWN_NO_GUARD=1 FM_FAKE_PANE_PATH="$home" FM_FAKE_LAUNCH_LOG="$launchlog" \
+    "$ROOT/bin/fm-spawn.sh" sm --relaunch --harness 'omp --auto-approve' 2>&1)
+  status=$?
+  expect_code 0 "$status" "the raw secondmate relaunch should succeed: $out"
+  assert_absent "$world/home/state/sm.busy-gen" "a raw secondmate relaunch must retire the predecessor busy generation"
+  assert_absent "$world/home/state/sm.busy-state" "a raw secondmate relaunch must remove the predecessor busy record"
+  assert_contains "$(cat "$launchlog")" "omp --auto-approve" "the raw secondmate replacement was not delivered"
+  pass "fm-spawn: a raw secondmate relaunch retires its predecessor busy state"
+}
+
 test_secondmate_config_pinned_model_is_validated() {
   # The same seeded secondmate home, but the harness and model come from the
   # primary's config/secondmate-harness rather than the command line: the
@@ -611,6 +672,7 @@ test_spawn_launch_line_and_worker_wiring
 test_spawn_model_validation_scoped_to_listed_providers
 test_secondmate_launch_loads_generated_busy_extension
 test_raw_secondmate_does_not_arm_busy_state
+test_raw_secondmate_relaunch_retires_prior_busy_state
 test_secondmate_config_pinned_model_is_validated
 test_busy_extension_lifecycle
 test_control_composer_and_model_tables

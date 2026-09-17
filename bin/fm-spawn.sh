@@ -1523,6 +1523,7 @@ RAW_LAUNCH=0
 # validation teardown uses, so a malformed, ambiguous, or foreign record
 # refuses here exactly as it refuses there.
 RELAUNCH_PRIOR_HARNESS=
+RELAUNCH_PRIOR_BUSY_GEN=
 if [ "$RELAUNCH" -eq 1 ]; then
   [ "${#POS[@]}" -eq 1 ] || {
     echo "error: --relaunch takes the task id only; its project or home comes from the task's own record" >&2
@@ -1562,6 +1563,7 @@ if [ "$RELAUNCH" -eq 1 ]; then
     exit 1
   }
   RELAUNCH_PRIOR_HARNESS=$(fm_meta_get "$RELAUNCH_META" harness)
+  RELAUNCH_PRIOR_BUSY_GEN=$(fm_meta_get "$RELAUNCH_META" busy_gen)
   KIND=$(fm_meta_get "$RELAUNCH_META" kind)
   [ -n "$KIND" ] || KIND=ship
   MODE=$(fm_meta_get "$RELAUNCH_META" mode)
@@ -3816,6 +3818,13 @@ exclude_path() {
   grep -qxF "$rel" "$EXCL" 2>/dev/null || echo "$rel" >>"$EXCL"
 }
 if [ "$RELAUNCH" -eq 1 ]; then
+  if [ -n "$RELAUNCH_PRIOR_BUSY_GEN" ]; then
+    "$FM_ROOT/bin/fm-busy-event.sh" retire "$STATE_REAL" "$ID" \
+      --gen "$RELAUNCH_PRIOR_BUSY_GEN" || {
+      echo "error: could not retire prior busy generation for task $ID; refusing to relaunch" >&2
+      exit 1
+    }
+  fi
   # Retire the previous incarnation's per-task harness wiring before arming the
   # new one. Without this, a harness switch would leave the old adapter's hook
   # files and turn-end token registry entries behind, and even a same-harness
