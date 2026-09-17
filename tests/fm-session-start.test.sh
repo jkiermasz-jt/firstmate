@@ -19,8 +19,8 @@
 #     blocked row kept whole, the dispatchable queued listing bounded with an
 #     exact disclosed remainder
 #   - orphan status logs whose task meta has already disappeared
-#   - per-task endpoint-liveness lines for a live and a dead recorded target,
-#     tmux and herdr both
+#   - per-task endpoint-presence lines for a present and an absent recorded
+#     target, tmux and herdr both
 #   - composition: the script invokes the real fm-lock.sh/fm-bootstrap.sh/
 #     fm-wake-drain.sh (their real, distinctive output appears verbatim), it
 #     does not reimplement their logic
@@ -1264,8 +1264,8 @@ EOF
     "SECONDMATE_LIVENESS: secondmate $SESSION_START_SECOND_MATE_ID: skipped: existing endpoint has ambiguous agent process (backend=tmux)" \
     "session start did not distinguish an existing Pi-shaped process from a missing window"
   [ ! -s "$log" ] || fail "session start touched an ambiguous existing Pi process: $(cat "$log")"
-  assert_contains "$out" "endpoint: alive (backend=tmux window=firstmate:fm-$SESSION_START_SECOND_MATE_ID)" \
-    "the later fleet read should still see the ambiguous endpoint"
+  assert_contains "$out" "endpoint: present (backend=tmux window=firstmate:fm-$SESSION_START_SECOND_MATE_ID)" \
+    "the later fleet read should still see the ambiguous endpoint presence"
   pass "session start: an existing ambiguous Pi process prevents duplicate recovery"
 }
 
@@ -1283,7 +1283,7 @@ EOF
     "SECONDMATE_LIVENESS: secondmate $SESSION_START_SECOND_MATE_ID: skipped: endpoint probe unreadable (backend=tmux)" \
     "session start did not distinguish transient unreadability from absence"
   [ ! -s "$log" ] || fail "session start touched a transiently unreadable target: $(cat "$log")"
-  assert_contains "$out" "endpoint: dead (backend=tmux window=firstmate:fm-$SESSION_START_SECOND_MATE_ID)" \
+  assert_contains "$out" "endpoint: absent (backend=tmux window=firstmate:fm-$SESSION_START_SECOND_MATE_ID)" \
     "the later cheap presence read should preserve the visible offline symptom"
   pass "session start: transient tmux unreadability never licenses a relaunch"
 }
@@ -1325,6 +1325,48 @@ EOF
   pass "session start: a confirmed Herdr husk is closed and relaunched"
 }
 
+# The startup digest contains retained records for recovery, but only the
+# structured fleet snapshot may describe current activity. A stale quota note
+# must remain visible as history without becoming a live worker claim.
+test_canonical_activity_is_separate_from_retained_records() {
+  local rec root home fakebin out snapshot current retained
+  rec=$(new_world canonical-activity)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+
+  printf 'window=firstmate:stale\nkind=secondmate\nharness=claude\n' \
+    > "$home/state/goal-1.meta"
+  printf 'working: quota blocked (stale retained event)\n' \
+    > "$home/state/goal-1.status"
+  snapshot="$home/canonical-snapshot"
+  cat > "$snapshot" <<'SH'
+#!/usr/bin/env bash
+printf '%s\n' '{"schema":"fm-secondmate-home-summary.v1","valid":true,"state":"active_child_work","active_children":[{"id":"goal-2","state":"working","source":"pane","doing":"OCR coordinator"}]}'
+SH
+  chmod +x "$snapshot"
+
+  out=$(FM_FLEET_SNAPSHOT_BIN="$snapshot" run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "Current activity (canonical fleet snapshot)" \
+    "the fleet digest did not label the canonical activity projection"
+  assert_contains "$out" "active: goal-2 state=working source=pane doing=OCR coordinator" \
+    "the fleet digest did not present the canonical active child"
+  assert_contains "$out" "Retained task records (state/*.meta; not current activity)" \
+    "the fleet digest did not label retained records as non-authoritative activity"
+  assert_not_contains "$out" "Work under way (state/*.meta)" \
+    "the old activity-shaped heading still invites stale metadata to be read as current"
+
+  current=$(printf '%s\n' "$out" | awk '/^Current activity \(canonical fleet snapshot\)$/{flag=1;next}/^Retained task records \(state\/\*\.meta; not current activity\)$/{flag=0}flag')
+  assert_not_contains "$current" "quota blocked" \
+    "a retained quota event leaked into the canonical current-activity section"
+  retained=$(printf '%s\n' "$out" | awk '/^Retained task records \(state\/\*\.meta; not current activity\)$/{flag=1;next}/^Orphan status logs/{flag=0}flag')
+  assert_contains "$retained" "working: quota blocked (stale retained event)" \
+    "retained quota history disappeared from the recovery digest"
+  pass "session start presents current activity only from the canonical snapshot and keeps stale records as history"
+}
+
 # --- endpoint liveness: tmux and herdr, live and dead ------------------------
 
 test_endpoint_liveness_tmux() {
@@ -1341,10 +1383,10 @@ EOF
   printf 'window=fm-sess:dead-window\nkind=ship\n' > "$home/state/task-dead.meta"
 
   out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
-  assert_contains "$out" "endpoint: alive (backend=tmux window=fm-sess:live-window)" "live tmux endpoint not reported alive"
-  assert_contains "$out" "endpoint: dead (backend=tmux window=fm-sess:dead-window)" "dead tmux endpoint not reported dead"
+  assert_contains "$out" "endpoint: present (backend=tmux window=fm-sess:live-window)" "live tmux endpoint not reported present"
+  assert_contains "$out" "endpoint: absent (backend=tmux window=fm-sess:dead-window)" "dead tmux endpoint not reported absent"
 
-  pass "tmux endpoint liveness is reported per task: alive for a live window, dead for a gone one"
+  pass "tmux endpoint presence is reported per task: present for a live window, absent for a gone one"
 }
 
 test_endpoint_liveness_herdr() {
@@ -1361,10 +1403,10 @@ EOF
   printf 'window=sess:p-dead\nkind=ship\nbackend=herdr\n' > "$home/state/task-dead.meta"
 
   out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
-  assert_contains "$out" "endpoint: alive (backend=herdr window=sess:p-live)" "live herdr endpoint not reported alive"
-  assert_contains "$out" "endpoint: dead (backend=herdr window=sess:p-dead)" "dead herdr endpoint not reported dead"
+  assert_contains "$out" "endpoint: present (backend=herdr window=sess:p-live)" "live herdr endpoint not reported present"
+  assert_contains "$out" "endpoint: absent (backend=herdr window=sess:p-dead)" "dead herdr endpoint not reported absent"
 
-  pass "herdr endpoint liveness is reported per task: alive for a live pane, dead for a gone one"
+  pass "herdr endpoint presence is reported per task: present for a live pane, absent for a gone one"
 }
 
 # --- composition: real scripts run, not reimplemented ------------------------
@@ -2689,6 +2731,7 @@ test_session_start_preserves_ambiguous_pi_process
 test_session_start_preserves_transiently_unreadable_tmux
 test_session_start_preserves_proven_bare_shell_recovery
 test_session_start_relaunches_herdr_husk_secondmate
+test_canonical_activity_is_separate_from_retained_records
 test_status_tail_bounding
 test_status_tail_line_cap
 test_orphan_status_logs_are_printed

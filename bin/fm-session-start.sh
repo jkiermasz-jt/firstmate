@@ -6,8 +6,8 @@
 # instead of the six-plus separate reads the old docs required: run
 # fm-bootstrap.sh, then separately read data/projects.md, data/secondmates.md,
 # data/captain.md, data/captain-shared.md, data/learnings.md, then run
-# fm-lock.sh, fm-wake-drain.sh, then read data/backlog.md, every state/*.meta,
-# and every state/*.status.
+# fm-lock.sh, fm-wake-drain.sh, then read the canonical fleet snapshot,
+# data/backlog.md, every state/*.meta, and every state/*.status.
 # Every one of those reads is UNCONDITIONAL at every session start, so they
 # belong in a script, not in N agent turns.
 #
@@ -43,11 +43,11 @@
 #                       detected primary harness.
 #   5. read-once contract - the do-not-re-read contract covering every source
 #                       represented by the two digests below.
-#   6. fleet digest   - a compact data/backlog.md identity/metadata listing,
-#                       every state/*.meta, a bounded state/*.status tail,
-#                       the away posture (state/.afk-contract and the legacy
-#                       state/.afk daemon flag), and a cheap per-task
-#                       endpoint-liveness read:
+#   6. fleet digest   - the canonical local fleet-snapshot activity projection,
+#                       followed by retained state/*.meta records, a bounded
+#                       state/*.status tail, the away posture
+#                       (state/.afk-contract and the legacy state/.afk daemon
+#                       flag), and a cheap per-task endpoint-presence read:
 #                       read-only, always runs.
 #   7. network checks - the result of the deferred network stage started back at
 #                       step 1, harvested WITHOUT waiting for it.
@@ -91,7 +91,7 @@
 # memory is stable session to session, is already governed by a captain-set
 # budget (config/startup-memory-budget), and is recoverable with one targeted
 # read; live fleet identity - which tasks exist, their windows, worktrees,
-# backends, and endpoint liveness - changes every session and is exactly what
+# backends, and endpoint presence - changes every session and is exactly what
 # recovery depends on. So fleet state goes first and the memory files absorb the
 # truncation. The read-once contract moves ahead of both for the same reason: a
 # contract that only arrives after the payload it governs is the first thing a
@@ -537,6 +537,55 @@ print_status_tail() {
   done < <(tail -n "$STATUS_TAIL" "$status")
 }
 
+# The structured fleet snapshot owns current activity. This local-only summary
+# mode reads the current home without collecting registered remote homes, so
+# session start keeps its no-network-on-the-blocking-path guarantee.
+CANONICAL_SNAPSHOT_BIN=${FM_FLEET_SNAPSHOT_BIN:-$SCRIPT_DIR/fm-fleet-snapshot.sh}
+print_canonical_activity() {
+  local snapshot current projects
+  projects="$FM_HOME/projects"
+  subsection "Current activity (canonical fleet snapshot)"
+  if ! command -v jq >/dev/null 2>&1; then
+    printf 'current activity: unavailable (jq is not installed for the canonical fleet snapshot)\n'
+    return 0
+  fi
+  if [ ! -x "$CANONICAL_SNAPSHOT_BIN" ]; then
+    printf 'current activity: unavailable (canonical fleet snapshot is not executable: %s)\n' \
+      "$CANONICAL_SNAPSHOT_BIN"
+    return 0
+  fi
+  if ! snapshot=$(env \
+    FM_ROOT_OVERRIDE="$FM_ROOT" \
+    FM_HOME="$FM_HOME" \
+    FM_STATE_OVERRIDE="$STATE" \
+    FM_DATA_OVERRIDE="$DATA" \
+    FM_PROJECTS_OVERRIDE="$projects" \
+    FM_CONFIG_OVERRIDE="$CONFIG" \
+    "$CANONICAL_SNAPSHOT_BIN" --secondmate-home-summary 2>/dev/null); then
+    printf 'current activity: unavailable (canonical fleet snapshot failed)\n'
+    return 0
+  fi
+  if ! current=$(printf '%s\n' "$snapshot" | jq -er '
+    if .schema != "fm-secondmate-home-summary.v1" then
+      error("unsupported canonical fleet snapshot schema")
+    elif .valid != true then
+      "current activity: unknown (inventory invalid: " +
+      (((.reason // "") | if length > 0 then . else (.invalidity.kind // "unknown") end)) + ")"
+    elif (.active_children | length) == 0 then
+      "current activity: no active child work proven"
+    else
+      .active_children[]
+      | "active: \(.id) state=\(.state) source=\(.source) doing=\(.doing // .state)"
+    end
+  '); then
+    printf 'current activity: unavailable (canonical fleet snapshot was invalid)\n'
+    return 0
+  fi
+  printf '%s\n' "$current"
+  printf 'registered secondmate current activity is not inferred from retained parent records; use %s --json for the cross-home projection.\n' \
+    "$SCRIPT_DIR/fm-fleet-snapshot.sh"
+}
+
 hash_file_sha256() {
   local file=$1 digest
   [ -f "$file" ] || return 1
@@ -803,8 +852,9 @@ fi
 stage read-once
 section "READ-ONCE CONTRACT"
 cat <<'EOF'
-Everything below is printed in full for this session start: every state/*.meta,
-a compact data/backlog.md listing, a bounded tail of every state/*.status,
+Everything below is printed in full for this session start: the canonical local
+fleet-snapshot activity projection, every state/*.meta, a compact
+data/backlog.md listing, a bounded tail of every state/*.status,
 data/projects.md, data/secondmates.md, data/captain.md, data/captain-shared.md,
 and data/learnings.md.
 Do NOT re-read any of them after reading this digest, and do NOT bulk-read
@@ -832,7 +882,9 @@ stage fleet-state
 section "FLEET STATE"
 print_backlog_compact "$DATA/backlog.md" "data/backlog.md"
 
-subsection "Work under way (state/*.meta)"
+print_canonical_activity
+
+subsection "Retained task records (state/*.meta; not current activity)"
 META_FOUND=0
 for meta in "$STATE"/*.meta; do
   [ -f "$meta" ] || continue
@@ -846,9 +898,9 @@ for meta in "$STATE"/*.meta; do
   if [ -n "$window" ]; then
     backend=$(fm_backend_of_meta "$meta")
     if fm_backend_target_exists "$backend" "${target:-$window}" "fm-$id"; then
-      printf 'endpoint: alive (backend=%s window=%s)\n' "$backend" "$window"
+      printf 'endpoint: present (backend=%s window=%s)\n' "$backend" "$window"
     else
-      printf 'endpoint: dead (backend=%s window=%s)\n' "$backend" "$window"
+      printf 'endpoint: absent (backend=%s window=%s)\n' "$backend" "$window"
     fi
   else
     printf 'endpoint: unknown (no window recorded)\n'

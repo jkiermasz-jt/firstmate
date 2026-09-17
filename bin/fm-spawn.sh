@@ -161,10 +161,10 @@
 #   never lists) passes through unvalidated with a stderr notice, and a bare
 #   fuzzy pattern is left to omp's own matcher. A crewmate or scout loads its
 #   per-task busy-state extension with -e from state/ (outside the worktree, so
-#   auto-discovery cannot load it a second time); a secondmate passes no -e at
-#   all and relies on omp auto-discovering the home's tracked .omp/extensions/
-#   (verified, omp 18.1.11: a file named both ways loads twice, and discovery is
-#   cwd-only with no trust dialog).
+#   auto-discovery cannot load it a second time); a secondmate passes one -e for
+#   that generated extension and relies on omp auto-discovering the home's
+#   tracked .omp/extensions/ (verified, omp 18.1.11: a file named both ways
+#   loads twice, and discovery is cwd-only with no trust dialog).
 #   config/secondmate-harness may also carry an optional model and effort as extra
 #   whitespace-separated tokens ("<harness> [<model>] [<effort>]"). For a
 #   --secondmate spawn, those tokens apply only when this spawn also resolves its
@@ -1780,7 +1780,7 @@ launch_template() {
   pi | pi-signed)
     printf '%s' '__PIBIN____PITUIMODE__'
     if [ "$kind" = secondmate ]; then
-      printf '%s' ' __MODELFLAG____EFFORTFLAG__-e __PITURNEND__ -e __PIWATCH__ "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
+      printf '%s' ' __MODELFLAG____EFFORTFLAG__-e __PITURNEND__ -e __PIWATCH__ -e __PIEXT__ "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
     else
       printf '%s' ' __MODELFLAG____EFFORTFLAG__-e __PIEXT__ "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
     fi
@@ -1794,13 +1794,13 @@ launch_template() {
   # prompt can park an unattended worker, the tracked posture overlay so a
   # captain-level plan, prewalk, or usage dialog cannot either, and --cwd
   # pinned to the worktree because omp's extension discovery is cwd-only. A
-  # secondmate loads its two primary extensions by that discovery alone:
-  # naming them with -e as well loads each twice (verified), doubling every
-  # session_stop continuation.
+  # secondmate loads its two primary extensions by that discovery alone. It
+  # receives one explicit -e for its generated per-task busy-state extension;
+  # that file is not auto-discovered, so it cannot be loaded twice.
   omp)
     printf '%s' 'env -u CLAUDECODE -u PI_CODING_AGENT -u GROK_AGENT -u FM_PI_HARNESS -u GEMINI_CLI -u CURSOR_AGENT -u CURSOR_INVOKED_AS FM_OMP_HARNESS=omp OMP_SKIP_SETUP=1 __OMPBIN__ --config __OMPWORKERCFG__ --auto-approve --cwd __WORKTREE__'
     if [ "$kind" = secondmate ]; then
-      printf '%s' ' __MODELFLAG____EFFORTFLAG__"$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
+      printf '%s' ' __MODELFLAG____EFFORTFLAG__-e __OMPEXT__ "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
     else
       printf '%s' ' __MODELFLAG____EFFORTFLAG__-e __OMPEXT__ "$(__OPINPUT__ encode launch-brief < __BRIEF__)"'
     fi
@@ -3823,16 +3823,15 @@ if [ "$RELAUNCH" -eq 1 ]; then
   RELAUNCH_REPLACEMENT_STATE=$STATE_REAL
   RELAUNCH_REPLACEMENT_WT=$WT
 fi
-if [ "$KIND" != secondmate ]; then
-  # Arm the semantic busy-state contract (bin/fm-busy-lib.sh) for every
-  # adapter with a verified semantic source. The launch brief sent below IS a
-  # submitted turn, so the seed record is busy/fm-spawn. The minted gen is
-  # embedded into each adapter's wiring so an event from a superseded
-  # incarnation is rejected as stale. Grok and rovo stay on their isolated
-  # rendered-tail fallbacks and standalone Kimi stays unknown until
-  # fm_busy_kimi_verified opens, so none of the three is armed here. Gemini IS
-  # armed: its BeforeAgent / AfterAgent / SessionEnd hooks are a verified
-  # open-close pair.
+# Arm the semantic busy-state contract (bin/fm-busy-lib.sh) for every adapter
+# with a verified semantic source, including supported secondmates. The launch
+# brief sent below IS a submitted turn, so the seed record is busy/fm-spawn.
+# The minted gen is embedded into each adapter's wiring so an event from a
+# superseded incarnation is rejected as stale. Grok and rovo stay on their
+# isolated rendered-tail fallbacks and standalone Kimi stays unknown until
+# fm_busy_kimi_verified opens, so none of the three is armed here. Gemini IS
+# armed: its BeforeAgent / AfterAgent / SessionEnd hooks are a verified
+# open-close pair.
   BUSY_GEN=
   case "$HARNESS" in
   codex*)
@@ -4187,7 +4186,6 @@ EOF
     exclude_path '.fm-kimi-turnend'
     ;;
   esac
-fi
 
 # Delivery posture recorded in meta so fm-teardown's safety check and the
 # validate/merge stages can branch on it. A ship task carries the explicit
