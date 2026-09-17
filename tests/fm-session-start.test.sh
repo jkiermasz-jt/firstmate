@@ -1405,6 +1405,9 @@ case "${FM_SNAPSHOT_CASE:-decision}" in
   truncated)
     printf '%s\n' '{"schema":"fm-fleet-snapshot.v1","tasks":[],"secondmate_current":{"records":[],"truncated":1}}'
     ;;
+  incomplete)
+    printf '%s\n' '{"schema":"fm-fleet-snapshot.v1","tasks":[],"main_inventory":{"valid":false,"reason":"unstructured current backlog row"},"secondmate_current":{"registry":{"available":false,"complete":false,"reason":"registered secondmate table is unreadable","records_truncated":true},"records":[]}}'
+    ;;
 esac
 SH
   chmod +x "$snapshot"
@@ -1460,6 +1463,18 @@ SH
     "secondmate snapshot truncation was not disclosed"
   assert_not_contains "$out" "no active child work proven" \
     "a truncated secondmate snapshot was reduced to an inactive result"
+
+  out=$(FM_SNAPSHOT_CASE=incomplete FM_FLEET_SNAPSHOT_BIN="$snapshot" run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "current activity unavailable: registered secondmate registry registered secondmate table is unreadable" \
+    "an unavailable secondmate registry was hidden"
+  assert_contains "$out" "current activity incomplete: registered secondmate registry is incomplete" \
+    "an incomplete secondmate registry was hidden"
+  assert_contains "$out" "current activity incomplete: registered secondmate registry records were truncated" \
+    "secondmate registry truncation was hidden"
+  assert_contains "$out" "current activity incomplete: main task inventory unstructured current backlog row" \
+    "an incomplete main inventory was hidden"
+  assert_not_contains "$out" "no active child work proven" \
+    "top-level snapshot incompleteness was reduced to an inactive result"
   pass "session start renders canonical decision and hold activity surfaces"
 }
 

@@ -731,12 +731,15 @@ test_secondmate_and_child_bounds_are_disclosed() {
 }
 
 test_read_only_secondmate_cap_keeps_local_records() {
-  local home mate fakebin canonical
+  local home mate remote_home fakebin canonical
   home=$(make_home read-only-secondmate-cap)
   mate="$TMP_ROOT/read-only-secondmate-cap-home"
   make_valid_secondmate_home z-local "$mate"
-  printf -- '- a-remote - remote fixture (host: host; root: /remote/root; home: /remote/home; scope: fixture; projects: sample; added 2026-07-13)\n' \
-    > "$home/data/secondmates.md"
+  remote_home="$TMP_ROOT/read-only-unregistered-remote-home"
+  mkdir -p "$remote_home/state"
+  fm_write_meta "$home/state/a-remote.meta" \
+    "kind=secondmate" "mode=secondmate" "harness=pi" \
+    "remote_host=host" "remote_root=/remote/root" "home=$remote_home"
   append_secondmate_registry "$home" z-local "$mate"
   mkdir -p "$mate/projects/child"
   cat > "$mate/data/backlog.md" <<'EOF'
@@ -897,8 +900,13 @@ EOF
   fm_write_meta "$mate/state/parked.meta" \
     "window=firstmate:fm-parked" "worktree=$mate/projects/parked" "project=sample" \
     "harness=claude" "kind=ship" "mode=no-mistakes"
+  fm_write_meta "$mate/state/blocked.meta" \
+    "window=firstmate:fm-blocked" "worktree=$mate/projects/done" "project=sample" \
+    "harness=claude" "kind=ship" "mode=no-mistakes"
   record_claude_state "$mate/state" parked idle
+  record_claude_state "$mate/state" blocked idle
   printf 'needs-decision [key=parked]: choose a route\n' > "$mate/state/parked.status"
+  printf 'blocked [key=blocked]: waiting on a dependency\n' > "$mate/state/blocked.status"
   fakebin=$(make_fakebin "$home")
   refresh_local_secondmate_ledgers "$home"
   canonical=$(PATH="$fakebin:$PATH" FM_HOME="$home" FM_SNAPSHOT_NOW=2026-07-11T18:00:00Z \
@@ -908,7 +916,10 @@ EOF
     | .current.state == "captain_decision"
       and .active_children == []
       and (.holds | any(.id == "parked" and .source == "child-state"))
+      and (.holds | any(.id == "blocked") | not)
+      and (.decisions_open | any(.id == "blocked"))
   ' >/dev/null || fail "parked child was classified as active work: $canonical"
+  rm "$mate/state/blocked.meta" "$mate/state/blocked.status"
   cat > "$mate/data/backlog.md" <<'EOF'
 ## In flight
 

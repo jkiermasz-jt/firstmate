@@ -1063,7 +1063,7 @@ secondmate_home_summary_json() {  # <backlog-json-file> <tasks-json-file>
             reason:((.hold_reason // .blocked_reason // "blocked") | trunc(120)),source:"backlog"} ]
        + [ $owned_in_flight[] as $work
            | $tasks[]
-           | select(.id == $work.id and (.current_state.state == "parked" or .current_state.state == "paused" or .current_state.state == "blocked"))
+           | select(.id == $work.id and (.current_state.state == "parked" or .current_state.state == "paused"))
            | select(($work.hold_reason != null and $work.hold_kind != null) | not)
            | {id,title:((.backlog.title // .id) | trunc(90)),blocked_by:null,
               blocked_by_ids:[],unresolved_blocker_ids:[],
@@ -1730,10 +1730,14 @@ secondmate_current_json() {  # <parent-tasks-json-file> <output-file>
     ($registry.records // []) as $registered
     | (($registered | map(.id)) // []) as $registered_ids
     | ([ $registered[] as $r
-         | $r + {parent_task:([$tasks[] | select(.id == $r.id)][0] // null)} ]
+         | ([ $tasks[] | select(.id == $r.id) ][0] // null) as $parent_task
+         | $r + {parent_task:$parent_task,
+                remote:(($r.remote == true) or (($parent_task.remote.host // "") != ""))} ]
        + [ $tasks[] | select(.kind == "secondmate") as $t
            | select(($registered_ids | index($t.id)) == null)
            | {id:$t.id,home:($t.paths.home.path // null),
+              host:($t.remote.host // null),root:($t.remote.root // null),
+              remote:(($t.remote.host // "") != ""),
               registered:(if $registry.complete == true then false else null end),
               registry_error:(if $registry.complete == true
                               then "secondmate metadata is not registered"

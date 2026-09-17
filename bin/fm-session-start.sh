@@ -611,6 +611,18 @@ print_canonical_activity() {
            (if (($secondmate_current.remote_skipped // 0) > 0) then
              "current activity incomplete: omitted \(.secondmate_current.remote_skipped) remote secondmate record(s)"
            else empty end)]) as $secondmate_omitted
+       | ([(if ($secondmate_current.registry.available == false) then
+              "current activity unavailable: registered secondmate registry \($secondmate_current.registry.reason // "unavailable")"
+            else empty end),
+           (if ($secondmate_current.registry.complete == false) then
+              "current activity incomplete: registered secondmate registry is incomplete"
+            else empty end),
+           (if (($secondmate_current.registry.records_truncated // false) == true) then
+              "current activity incomplete: registered secondmate registry records were truncated"
+            else empty end),
+           (if (.main_inventory.valid == false) then
+              "current activity incomplete: main task inventory \(.main_inventory.reason // "invalid")"
+            else empty end)]) as $top_incomplete
        | any($decisions[]?; .verb == "needs-decision" or .verb == "captain-hold") as $captain_decision
        | [
            (if ($active | length) > 0 then
@@ -628,7 +640,8 @@ print_canonical_activity() {
             | map("current activity incomplete: omitted \(.count) \(.surface) record(s)")),
            $unknown,
            $unknown_main,
-           $secondmate_omitted
+           $secondmate_omitted,
+           $top_incomplete
          ]
        | add
        | if length == 0 then ["current activity: no active child work proven"] else . end
