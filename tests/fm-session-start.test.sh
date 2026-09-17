@@ -1388,10 +1388,13 @@ EOF
 #!/usr/bin/env bash
 case "${FM_SNAPSHOT_CASE:-decision}" in
   decision)
-    printf '%s\n' '{"schema":"fm-fleet-snapshot.v1","tasks":[{"id":"sm-1","kind":"secondmate","hints":{"open_decisions":[{"id":"parent-stale","summary":"Stale parent question","verb":"needs-decision"}]}}],"secondmate_current":{"records":[{"id":"sm-1","active_children":[{"id":"goal-2","state":"working","source":"pane","doing":"Live worker"}],"decisions_open":[{"id":"goal-3","summary":"Choose launch route","verb":"captain-hold"}],"holds":[{"id":"goal-4","reason":"Waiting for vendor access"}],"omitted":[{"surface":"active_children","count":2},{"surface":"decisions_open","count":1},{"surface":"holds","count":3}]}]}}'
+    printf '%s\n' '{"schema":"fm-fleet-snapshot.v1","tasks":[{"id":"sm-1","kind":"secondmate","hints":{"open_decisions":[{"id":"parent-stale","summary":"Stale parent question","verb":"needs-decision"}]}}],"secondmate_current":{"records":[{"id":"sm-1","active_children":[{"id":"goal-2","state":"working","source":"pane","doing":"Live worker"}],"decisions_open":[{"id":"goal-3","summary":"Choose launch route","verb":"captain-hold"}],"holds":[{"id":"goal-4","reason":"Waiting for vendor access","source":"child-state"}],"omitted":[{"surface":"active_children","count":2},{"surface":"decisions_open","count":1},{"surface":"holds","count":3}]}]}}'
     ;;
   hold)
-    printf '%s\n' '{"schema":"fm-fleet-snapshot.v1","tasks":[],"secondmate_current":{"records":[{"id":"sm-1","active_children":[],"decisions_open":[],"holds":[{"id":"goal-4","reason":"Waiting for vendor access"}]}]}}'
+    printf '%s\n' '{"schema":"fm-fleet-snapshot.v1","tasks":[],"secondmate_current":{"records":[{"id":"sm-1","active_children":[],"decisions_open":[],"holds":[{"id":"goal-4","reason":"Waiting for vendor access","source":"child-state"}]}]}}'
+    ;;
+  backlog-holds)
+    printf '%s\n' '{"schema":"fm-fleet-snapshot.v1","tasks":[],"secondmate_current":{"records":[{"id":"sm-1","active_children":[],"decisions_open":[{"id":"captain","summary":"Choose a route","verb":"captain-hold"}],"holds":[{"id":"captain","reason":"Choose a route","source":"backlog","hold_kind":"captain"},{"id":"blocked","reason":"Waiting on dependency","source":"backlog","hold_kind":null}]}]}}'
     ;;
   blocked)
     printf '%s\n' '{"schema":"fm-fleet-snapshot.v1","tasks":[{"id":"goal-6","kind":"ship","current_state":{"state":"blocked","detail":"Waiting on blocker"},"hints":{"open_decisions":[{"summary":"Waiting on blocker","verb":"blocked"}]}}],"secondmate_current":{"records":[]}}'
@@ -1437,6 +1440,18 @@ SH
     "the canonical externally-held state was not rendered"
   assert_not_contains "$out" "no active child work proven" \
     "the canonical hold was reduced to an empty child-work state"
+
+  out=$(FM_SNAPSHOT_CASE=backlog-holds FM_FLEET_SNAPSHOT_BIN="$snapshot" run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "current activity: captain decision required" \
+    "a canonical captain hold lost its decision classification"
+  assert_contains "$out" "current activity: blocked work" \
+    "a canonical backlog blocker lost its blocked classification"
+  assert_contains "$out" "blocked: sm-1/blocked Waiting on dependency" \
+    "a canonical backlog blocker was not rendered"
+  assert_not_contains "$out" "current activity: externally held" \
+    "canonical backlog holds were mislabelled as external holds"
+  assert_not_contains "$out" "held: sm-1/captain" \
+    "a canonical captain hold was duplicated as an external hold"
 
   out=$(FM_SNAPSHOT_CASE=blocked FM_FLEET_SNAPSHOT_BIN="$snapshot" run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
   assert_contains "$out" "current activity: decisions open" \

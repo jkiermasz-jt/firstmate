@@ -1060,7 +1060,8 @@ secondmate_home_summary_json() {  # <backlog-json-file> <tasks-json-file>
             blocked_by:((.unresolved_blocker_ids | join(",")) | if . == "" then null else trunc(120) end),
             blocked_by_ids:(.blocked_by_ids | map(trunc(120))),
             unresolved_blocker_ids:(.unresolved_blocker_ids | map(trunc(120))),
-            reason:((.hold_reason // .blocked_reason // "blocked") | trunc(120)),source:"backlog"} ]
+            reason:((.hold_reason // .blocked_reason // "blocked") | trunc(120)),
+            hold_kind:(.hold_kind // null),source:"backlog"} ]
        + [ $owned_in_flight[] as $work
            | $tasks[]
            | select(.id == $work.id and (.current_state.state == "parked" or .current_state.state == "paused"))

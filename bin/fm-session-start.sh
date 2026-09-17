@@ -588,10 +588,11 @@ print_canonical_activity() {
              | {id:($mate.id + "/" + .id),verb,summary:(.summary // .reason // .verb)}])) as $decisions
        | (([.tasks[]?
            | select(.kind != "secondmate" and (.current_state.state == "parked" or .current_state.state == "paused"))
-           | {id:.id,reason:(.current_state.detail // .current_state.state)}]
+           | {id:.id,reason:(.current_state.detail // .current_state.state),source:"child-state"}]
           + [(.secondmate_current.records // [])[] as $mate
              | $mate.holds[]?
-             | {id:($mate.id + "/" + .id),reason:(.reason // .title // "held")}])) as $holds
+             | {id:($mate.id + "/" + .id),reason:(.reason // .title // "held"),
+                source:(.source // "unknown"),hold_kind:(.hold_kind // null)}])) as $holds
        | (([(.secondmate_current.records // [])[] as $mate
              | $mate.omitted[]?
              | select(.surface == "active_children" or .surface == "decisions_open" or .surface == "holds")
@@ -632,10 +633,16 @@ print_canonical_activity() {
               [(if $captain_decision then "current activity: captain decision required" else "current activity: decisions open" end)] +
               ($decisions | map("decision: \(.id) \(.summary // .reason // .verb)"))
             else [] end),
-           (if ($holds | length) > 0 then
+           (if ($holds | any(.source == "child-state")) then
               ["current activity: externally held"] +
-              ($holds | map("held: \(.id) \(.reason // .title // "held")"))
-           else [] end),
+              ($holds | map(select(.source == "child-state")
+                | "held: \(.id) \(.reason // .title // "held")"))
+            else [] end),
+           (if ($holds | any(.source == "backlog" and .hold_kind != "captain")) then
+              ["current activity: blocked work"] +
+              ($holds | map(select(.source == "backlog" and .hold_kind != "captain")
+                | "blocked: \(.id) \(.reason // .title // "blocked")"))
+            else [] end),
            ($omitted
             | map("current activity incomplete: omitted \(.count) \(.surface) record(s)")),
            $unknown,

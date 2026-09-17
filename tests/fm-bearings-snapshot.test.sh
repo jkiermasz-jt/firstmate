@@ -894,6 +894,7 @@ test_nonprogressing_child_states_are_explicit() {
 - [ ] parked - Parked child (repo: sample) (kind: ship) (since 2026-07-11)
 
 ## Queued
+- [ ] blocked - Blocked child blocked-by: dependency - Waiting on dependency (repo: sample) (kind: ship) (since 2026-07-11)
 
 ## Done
 EOF
@@ -916,7 +917,7 @@ EOF
     | .current.state == "captain_decision"
       and .active_children == []
       and (.holds | any(.id == "parked" and .source == "child-state"))
-      and (.holds | any(.id == "blocked") | not)
+      and (.holds | any(.id == "blocked" and .source == "backlog" and .hold_kind == null))
       and (.decisions_open | any(.id == "blocked"))
   ' >/dev/null || fail "parked child was classified as active work: $canonical"
   rm "$mate/state/blocked.meta" "$mate/state/blocked.status"

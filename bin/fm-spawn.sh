@@ -3854,8 +3854,8 @@ fi
 # fm_busy_kimi_verified opens, so none of the three is armed here. Gemini IS
 # armed: its BeforeAgent / AfterAgent / SessionEnd hooks are a verified
 # open-close pair.
+BUSY_GEN=
 if [ "$RAW_LAUNCH" -eq 0 ]; then
-  BUSY_GEN=
   case "$HARNESS" in
   codex*)
     if fm_busy_codex_semantic_source; then
