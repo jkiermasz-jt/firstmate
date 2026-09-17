@@ -730,6 +730,41 @@ test_secondmate_and_child_bounds_are_disclosed() {
   pass "secondmate and per-home child counts are bounded, disclosed, and explicitly expandable"
 }
 
+test_read_only_secondmate_cap_keeps_local_records() {
+  local home mate fakebin canonical
+  home=$(make_home read-only-secondmate-cap)
+  mate="$TMP_ROOT/read-only-secondmate-cap-home"
+  make_valid_secondmate_home z-local "$mate"
+  printf -- '- a-remote - remote fixture (host: host; root: /remote/root; home: /remote/home; scope: fixture; projects: sample; added 2026-07-13)\n' \
+    > "$home/data/secondmates.md"
+  append_secondmate_registry "$home" z-local "$mate"
+  mkdir -p "$mate/projects/child"
+  cat > "$mate/data/backlog.md" <<'EOF'
+## In flight
+- [ ] child - Active child (repo: sample) (kind: ship) (since 2026-07-13)
+
+## Queued
+
+## Done
+EOF
+  fm_write_meta "$mate/state/child.meta" \
+    "window=firstmate:fm-child" "worktree=$mate/projects/child" "project=sample" \
+    "harness=claude" "kind=ship" "mode=no-mistakes"
+  record_claude_state "$mate/state" child busy
+  printf 'working: active child\n' > "$mate/state/child.status"
+  fakebin=$(make_fakebin "$home")
+  PATH="$fakebin:$PATH" refresh_local_secondmate_ledgers "$home"
+  canonical=$(PATH="$fakebin:$PATH" FM_HOME="$home" FM_SNAPSHOT_SKIP_REMOTE=1 \
+    FM_SNAPSHOT_SECONDMATES=1 "$ROOT/bin/fm-fleet-snapshot.sh" --json)
+  printf '%s' "$canonical" | jq -e '
+    .secondmate_current.remote_skipped == 1
+      and .secondmate_current.shown == 1
+      and (.secondmate_current.records | any(.id == "z-local"
+        and (.active_children | any(.id == "child"))))
+  ' >/dev/null || fail "read-only secondmate cap crowded out local activity: $canonical"
+  pass "read-only secondmate bounds preserve local activity ahead of remote records"
+}
+
 test_parent_decision_is_untrusted_contradiction_only() {
   local home mate fakebin canonical json
   home=$(make_home parent-decision-only)

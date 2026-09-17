@@ -1388,7 +1388,7 @@ EOF
 #!/usr/bin/env bash
 case "${FM_SNAPSHOT_CASE:-decision}" in
   decision)
-    printf '%s\n' '{"schema":"fm-fleet-snapshot.v1","tasks":[],"secondmate_current":{"records":[{"id":"sm-1","active_children":[{"id":"goal-2","state":"working","source":"pane","doing":"Live worker"}],"decisions_open":[{"id":"goal-3","summary":"Choose launch route","verb":"captain-hold"}],"holds":[{"id":"goal-4","reason":"Waiting for vendor access"}],"omitted":[{"surface":"active_children","count":2},{"surface":"decisions_open","count":1},{"surface":"holds","count":3}]}]}}'
+    printf '%s\n' '{"schema":"fm-fleet-snapshot.v1","tasks":[{"id":"sm-1","kind":"secondmate","hints":{"open_decisions":[{"id":"parent-stale","summary":"Stale parent question","verb":"needs-decision"}]}}],"secondmate_current":{"records":[{"id":"sm-1","active_children":[{"id":"goal-2","state":"working","source":"pane","doing":"Live worker"}],"decisions_open":[{"id":"goal-3","summary":"Choose launch route","verb":"captain-hold"}],"holds":[{"id":"goal-4","reason":"Waiting for vendor access"}],"omitted":[{"surface":"active_children","count":2},{"surface":"decisions_open","count":1},{"surface":"holds","count":3}]}]}}'
     ;;
   hold)
     printf '%s\n' '{"schema":"fm-fleet-snapshot.v1","tasks":[],"secondmate_current":{"records":[{"id":"sm-1","active_children":[],"decisions_open":[],"holds":[{"id":"goal-4","reason":"Waiting for vendor access"}]}]}}'
@@ -1411,6 +1411,8 @@ SH
     "the canonical captain-decision state was not rendered"
   assert_contains "$out" "decision: sm-1/goal-3 Choose launch route" \
     "the canonical open decision was not rendered"
+  assert_not_contains "$out" "Stale parent question" \
+    "a secondmate parent decision leaked into current activity"
   assert_contains "$out" "active: sm-1/goal-2 state=working source=pane doing=Live worker" \
     "concurrent canonical active work was not rendered"
   assert_contains "$out" "held: sm-1/goal-4 Waiting for vendor access" \

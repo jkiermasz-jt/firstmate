@@ -580,6 +580,7 @@ print_canonical_activity() {
            | $mate.active_children[]?
            | {id:($mate.id + "/" + .id),state:(.state // "working"),source:(.source // "secondmate-home"),doing:(.doing // .state)}]) as $active
        | (([.tasks[]? as $task
+           | select($task.kind != "secondmate")
            | ($task.hints.open_decisions // [])[]
            | {id:$task.id,verb,summary:(.summary // .reason // .verb)}]
           + [(.secondmate_current.records // [])[] as $mate

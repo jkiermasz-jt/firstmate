@@ -1746,7 +1746,7 @@ secondmate_current_json() {  # <parent-tasks-json-file> <output-file>
   if [ "$FM_SNAPSHOT_SKIP_REMOTE" -eq 1 ]; then
     remote_skipped=$(jq '[.records[] | select(.remote == true)] | length' "$union_file")
     total=$((all_total - remote_skipped))
-    rows=$(jq -c --argjson cap "$FM_SNAPSHOT_SECONDMATES" '(if $cap == 0 then .records else .records[:$cap] end)[] | select(.remote != true)' "$union_file")
+    rows=$(jq -c --argjson cap "$FM_SNAPSHOT_SECONDMATES" '([.records[] | select(.remote != true)] | if $cap == 0 then . else .[:$cap] end)[]' "$union_file")
   else
     total=$all_total
     rows=$(jq -c --argjson cap "$FM_SNAPSHOT_SECONDMATES" '(if $cap == 0 then .records else .records[:$cap] end)[]' "$union_file")
