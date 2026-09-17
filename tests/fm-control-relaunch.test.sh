@@ -1290,6 +1290,8 @@ test_prepublication_abort_retires_replacement_wiring_and_busy_state() {
     || fail "an aborted replacement should retire its busy generation"
   [ ! -e "$dir/home/state/rl28.busy-state" ] \
     || fail "an aborted replacement should remove its seeded busy record"
+  assert_not_contains "$out" "could not retire busy generation after aborted spawn" \
+    "an aborted replacement should retire its busy generation only once"
   [ "$(journal_field "$dir" rl28 rollback)" = prior-record-kept ] \
     || fail "the journal should record the unpublished replacement rollback"
   pass "fm-spawn relaunch: prepublication abort removes replacement state"

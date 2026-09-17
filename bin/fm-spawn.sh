@@ -1120,6 +1120,10 @@ spawn_abort_cleanup() {
         "$RELAUNCH_REPLACEMENT_STATE" "$ID" \
         --gen "$RELAUNCH_REPLACEMENT_BUSY_GEN"; then
         echo "warning: could not retire replacement busy generation after aborted relaunch of $ID" >&2
+      elif [ "$SPAWN_BUSY_ARM_PENDING" = 1 ] &&
+        [ "$SPAWN_BUSY_ARM_STATE" = "$RELAUNCH_REPLACEMENT_STATE" ] &&
+        [ "$SPAWN_BUSY_ARM_GEN" = "$RELAUNCH_REPLACEMENT_BUSY_GEN" ]; then
+        SPAWN_BUSY_ARM_PENDING=0
       fi
     fi
   fi
