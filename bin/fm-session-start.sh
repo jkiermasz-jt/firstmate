@@ -543,7 +543,7 @@ print_status_tail() {
 CANONICAL_SNAPSHOT_BIN=${FM_FLEET_SNAPSHOT_BIN:-$SCRIPT_DIR/fm-fleet-snapshot.sh}
 print_canonical_activity() {
   local snapshot current projects
-  projects="$FM_HOME/projects"
+  projects="${FM_PROJECTS_OVERRIDE:-$FM_HOME/projects}"
   subsection "Current activity (canonical fleet snapshot)"
   if ! command -v jq >/dev/null 2>&1; then
     printf 'current activity: unavailable (jq is not installed for the canonical fleet snapshot)\n'

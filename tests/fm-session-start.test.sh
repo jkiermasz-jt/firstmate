@@ -1408,6 +1408,34 @@ SH
   pass "session start renders canonical decision and hold activity surfaces"
 }
 
+test_canonical_activity_uses_projects_override() {
+  local rec root home fakebin out snapshot projects
+  rec=$(new_world canonical-activity-projects-override)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+
+  projects="$home/alternate-projects"
+  mkdir -p "$projects"
+  snapshot="$home/canonical-snapshot"
+  cat > "$snapshot" <<SH
+#!/usr/bin/env bash
+if [ "\${FM_PROJECTS_OVERRIDE:-}" = "$projects" ]; then
+  printf '%s\\n' '{"schema":"fm-secondmate-home-summary.v1","valid":true,"state":"active_child_work","active_children":[{"id":"goal-5","state":"working","source":"override","doing":"Alternate projects"}]}'
+else
+  printf '%s\\n' '{"schema":"fm-secondmate-home-summary.v1","valid":true,"state":"no_active_work","active_children":[]}'
+fi
+SH
+  chmod +x "$snapshot"
+
+  out=$(FM_PROJECTS_OVERRIDE="$projects" FM_FLEET_SNAPSHOT_BIN="$snapshot" run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "active: goal-5 state=working source=override doing=Alternate projects" \
+    "the canonical snapshot did not receive the projects override"
+  pass "session start forwards the projects override to the canonical snapshot"
+}
+
 # --- endpoint liveness: tmux and herdr, live and dead ------------------------
 
 test_endpoint_liveness_tmux() {
@@ -2774,6 +2802,7 @@ test_session_start_preserves_proven_bare_shell_recovery
 test_session_start_relaunches_herdr_husk_secondmate
 test_canonical_activity_is_separate_from_retained_records
 test_canonical_activity_renders_decision_and_hold_surfaces
+test_canonical_activity_uses_projects_override
 test_status_tail_bounding
 test_status_tail_line_cap
 test_orphan_status_logs_are_printed

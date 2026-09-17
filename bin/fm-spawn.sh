@@ -3904,7 +3904,6 @@ EOF
     exclude_path '.claude/settings.local.json'
     ;;
   gemini)
-    if [ "$RAW_LAUNCH" -eq 0 ]; then
       # Semantic busy-state hooks (bin/fm-busy-lib.sh): BeforeAgent opens a
       # turn and AfterAgent closes it, with SessionEnd closing on process
       # shutdown so an abnormal end can never leave a stale busy record.
@@ -3935,7 +3934,6 @@ EOF
       cat >"$STATE_REAL/$ID.gemini-settings.json" <<EOF
 {"hooks":{"BeforeAgent":[{"hooks":[{"type":"command","command":"$g_before"}]}],"AfterAgent":[{"hooks":[{"type":"command","command":"$g_after"}]}],"SessionEnd":[{"hooks":[{"type":"command","command":"$g_sessionend"}]}]}}
 EOF
-    fi
     ;;
   opencode*)
     mkdir -p "$WT/.opencode/plugins"
