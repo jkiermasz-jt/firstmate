@@ -237,8 +237,9 @@ test_secondmate_launch_loads_generated_busy_extension() {
   expect_code 0 "$status" "omp secondmate spawn should succeed: $out"
   assert_grep "harness=omp" "$world/home/state/sm.meta" "secondmate meta missing harness=omp"
   launch=$(cat "$launchlog")
-  assert_contains "$launch" "-e '$world/home/state/sm.omp-ext.ts'" \
-    "an omp secondmate launch must load its state-resident busy extension exactly once: $launch"
+  extension_flag="-e '$world/home/state/sm.omp-ext.ts'"
+  extension_count=$(printf '%s\n' "$launch" | grep -F -o -- "$extension_flag" | wc -l | tr -d ' ')
+  [ "$extension_count" -eq 1 ] || fail "an omp secondmate launch must load its state-resident busy extension exactly once: $launch"
   assert_contains "$launch" "--config '$ROOT/.omp/fm-worker-overlay.yml' --auto-approve --cwd '$home'" "secondmate launch lost the posture overlay or the pinned home directory: $launch"
   assert_contains "$launch" "FM_OMP_HARNESS=omp OMP_SKIP_SETUP=1 '$fakebin/omp'" "secondmate launch lost the omp marker or executable"
   assert_contains "$launch" "FM_SUPERVISION_MODEL=extension" "an omp secondmate must run the extension supervision model"
