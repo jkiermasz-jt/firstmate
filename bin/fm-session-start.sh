@@ -571,17 +571,30 @@ print_canonical_activity() {
     elif .valid != true then
       "current activity: unknown (inventory invalid: " +
       (((.reason // "") | if length > 0 then . else (.invalidity.kind // "unknown") end)) + ")"
-    elif .state == "captain_decision" and ((.decisions_open // []) | length) > 0 then
-      "current activity: captain decision required\n" +
-      ((.decisions_open // []) | map("decision: \(.id) \(.summary // .reason // .verb)") | join("\n"))
-    elif .state == "externally_held" and ((.holds // []) | length) > 0 then
-      "current activity: externally held\n" +
-      ((.holds // []) | map("held: \(.id) \(.reason // .title // "held")") | join("\n"))
-    elif (.active_children | length) == 0 then
-      "current activity: no active child work proven"
     else
-      .active_children[]
-      | "active: \(.id) state=\(.state) source=\(.source) doing=\(.doing // .state)"
+      ((.active_children // []) as $active
+       | (.decisions_open // []) as $decisions
+       | (.holds // []) as $holds
+       | (.omitted // []) as $omitted
+       | [
+           (if ($active | length) > 0 then
+              $active | map("active: \(.id) state=\(.state) source=\(.source) doing=\(.doing // .state)")
+            else [] end),
+           (if ($decisions | length) > 0 then
+              ["current activity: captain decision required"] +
+              ($decisions | map("decision: \(.id) \(.summary // .reason // .verb)"))
+            else [] end),
+           (if ($holds | length) > 0 then
+              ["current activity: externally held"] +
+              ($holds | map("held: \(.id) \(.reason // .title // "held")"))
+            else [] end),
+           ($omitted
+            | map(select(.surface == "active_children" or .surface == "decisions_open" or .surface == "holds")
+                  | "current activity incomplete: omitted \(.count) \(.surface) record(s)"))
+         ]
+       | add
+       | if length == 0 then ["current activity: no active child work proven"] else . end
+       | join("\n"))
     end
   '); then
     printf 'current activity: unavailable (canonical fleet snapshot was invalid)\n'

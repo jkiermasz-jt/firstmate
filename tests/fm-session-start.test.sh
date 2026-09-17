@@ -1381,7 +1381,7 @@ EOF
 #!/usr/bin/env bash
 case "${FM_SNAPSHOT_CASE:-decision}" in
   decision)
-    printf '%s\n' '{"schema":"fm-secondmate-home-summary.v1","valid":true,"state":"captain_decision","active_children":[],"decisions_open":[{"id":"goal-3","summary":"Choose launch route","verb":"captain-hold"}],"holds":[]}'
+    printf '%s\n' '{"schema":"fm-secondmate-home-summary.v1","valid":true,"state":"captain_decision","active_children":[{"id":"goal-2","state":"working","source":"pane","doing":"Live worker"}],"decisions_open":[{"id":"goal-3","summary":"Choose launch route","verb":"captain-hold"}],"holds":[{"id":"goal-4","reason":"Waiting for vendor access"}],"omitted":[{"surface":"active_children","count":2},{"surface":"decisions_open","count":1},{"surface":"holds","count":3}]}'
     ;;
   hold)
     printf '%s\n' '{"schema":"fm-secondmate-home-summary.v1","valid":true,"state":"externally_held","active_children":[],"decisions_open":[],"holds":[{"id":"goal-4","reason":"Waiting for vendor access"}]}'
@@ -1395,6 +1395,16 @@ SH
     "the canonical captain-decision state was not rendered"
   assert_contains "$out" "decision: goal-3 Choose launch route" \
     "the canonical open decision was not rendered"
+  assert_contains "$out" "active: goal-2 state=working source=pane doing=Live worker" \
+    "concurrent canonical active work was not rendered"
+  assert_contains "$out" "held: goal-4 Waiting for vendor access" \
+    "concurrent canonical hold activity was not rendered"
+  assert_contains "$out" "current activity incomplete: omitted 2 active_children record(s)" \
+    "active-child omission was not disclosed"
+  assert_contains "$out" "current activity incomplete: omitted 1 decisions_open record(s)" \
+    "decision omission was not disclosed"
+  assert_contains "$out" "current activity incomplete: omitted 3 holds record(s)" \
+    "hold omission was not disclosed"
   assert_not_contains "$out" "no active child work proven" \
     "the canonical captain decision was reduced to an empty child-work state"
 
