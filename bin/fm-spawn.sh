@@ -1128,9 +1128,11 @@ spawn_abort_cleanup() {
     fi
   fi
   if [ "$SPAWN_BUSY_ARM_PENDING" = 1 ]; then
-    SPAWN_BUSY_ARM_PENDING=0
-    if ! "$FM_ROOT/bin/fm-busy-event.sh" retire \
+    if "$FM_ROOT/bin/fm-busy-event.sh" retire \
       "$SPAWN_BUSY_ARM_STATE" "$ID" --gen "$SPAWN_BUSY_ARM_GEN"; then
+      SPAWN_BUSY_ARM_PENDING=0
+      BUSY_GEN=
+    else
       echo "warning: could not retire busy generation after aborted spawn of $ID" >&2
     fi
   fi

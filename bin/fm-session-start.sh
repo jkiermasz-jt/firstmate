@@ -587,7 +587,7 @@ print_canonical_activity() {
              | $mate.decisions_open[]?
              | {id:($mate.id + "/" + .id),verb,summary:(.summary // .reason // .verb)}])) as $decisions
        | (([.tasks[]?
-           | select(.kind != "secondmate" and (.current_state.state == "parked" or .current_state.state == "paused" or .current_state.state == "blocked"))
+           | select(.kind != "secondmate" and (.current_state.state == "parked" or .current_state.state == "paused"))
            | {id:.id,reason:(.current_state.detail // .current_state.state)}]
           + [(.secondmate_current.records // [])[] as $mate
              | $mate.holds[]?

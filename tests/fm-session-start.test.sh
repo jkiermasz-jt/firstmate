@@ -1440,6 +1440,8 @@ SH
     "a blocked decision entry was not given a neutral activity label"
   assert_not_contains "$out" "current activity: captain decision required" \
     "a blocked decision entry was mislabelled as a captain decision"
+  assert_not_contains "$out" "current activity: externally held" \
+    "a blocked task was mislabelled as an external hold"
 
   out=$(FM_SNAPSHOT_CASE=unknown FM_FLEET_SNAPSHOT_BIN="$snapshot" run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
   assert_contains "$out" "current activity: unavailable (secondmate sm-unknown: child current state unavailable)" \
