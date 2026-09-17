@@ -3839,6 +3839,7 @@ fi
 # fm_busy_kimi_verified opens, so none of the three is armed here. Gemini IS
 # armed: its BeforeAgent / AfterAgent / SessionEnd hooks are a verified
 # open-close pair.
+if [ "$RAW_LAUNCH" -eq 0 ]; then
   BUSY_GEN=
   case "$HARNESS" in
   codex*)
@@ -3857,13 +3858,11 @@ fi
     [ "$RELAUNCH" -ne 1 ] || RELAUNCH_REPLACEMENT_BUSY_GEN=$BUSY_GEN
     ;;
   gemini)
-    if [ "$RAW_LAUNCH" -eq 0 ]; then
-      BUSY_GEN=$("$FM_ROOT/bin/fm-busy-event.sh" arm "$STATE_REAL" "$ID") || {
-        echo "error: failed to arm the busy-state contract for $ID" >&2
-        exit 1
-      }
-      [ "$RELAUNCH" -ne 1 ] || RELAUNCH_REPLACEMENT_BUSY_GEN=$BUSY_GEN
-    fi
+    BUSY_GEN=$("$FM_ROOT/bin/fm-busy-event.sh" arm "$STATE_REAL" "$ID") || {
+      echo "error: failed to arm the busy-state contract for $ID" >&2
+      exit 1
+    }
+    [ "$RELAUNCH" -ne 1 ] || RELAUNCH_REPLACEMENT_BUSY_GEN=$BUSY_GEN
     ;;
   kimi*)
     # Standalone Kimi stays unknown until fm_busy_kimi_verified opens on a
@@ -4198,6 +4197,7 @@ EOF
     exclude_path '.fm-kimi-turnend'
     ;;
   esac
+fi
 
 # Delivery posture recorded in meta so fm-teardown's safety check and the
 # validate/merge stages can branch on it. A ship task carries the explicit

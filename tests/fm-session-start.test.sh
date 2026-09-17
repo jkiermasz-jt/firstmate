@@ -1367,6 +1367,47 @@ SH
   pass "session start presents current activity only from the canonical snapshot and keeps stale records as history"
 }
 
+test_canonical_activity_renders_decision_and_hold_surfaces() {
+  local rec root home fakebin out snapshot
+  rec=$(new_world canonical-activity-surfaces)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+
+  snapshot="$home/canonical-snapshot"
+  cat > "$snapshot" <<'SH'
+#!/usr/bin/env bash
+case "${FM_SNAPSHOT_CASE:-decision}" in
+  decision)
+    printf '%s\n' '{"schema":"fm-secondmate-home-summary.v1","valid":true,"state":"captain_decision","active_children":[],"decisions_open":[{"id":"goal-3","summary":"Choose launch route","verb":"captain-hold"}],"holds":[]}'
+    ;;
+  hold)
+    printf '%s\n' '{"schema":"fm-secondmate-home-summary.v1","valid":true,"state":"externally_held","active_children":[],"decisions_open":[],"holds":[{"id":"goal-4","reason":"Waiting for vendor access"}]}'
+    ;;
+esac
+SH
+  chmod +x "$snapshot"
+
+  out=$(FM_SNAPSHOT_CASE=decision FM_FLEET_SNAPSHOT_BIN="$snapshot" run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "current activity: captain decision required" \
+    "the canonical captain-decision state was not rendered"
+  assert_contains "$out" "decision: goal-3 Choose launch route" \
+    "the canonical open decision was not rendered"
+  assert_not_contains "$out" "no active child work proven" \
+    "the canonical captain decision was reduced to an empty child-work state"
+
+  out=$(FM_SNAPSHOT_CASE=hold FM_FLEET_SNAPSHOT_BIN="$snapshot" run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "current activity: externally held" \
+    "the canonical externally-held state was not rendered"
+  assert_contains "$out" "held: goal-4 Waiting for vendor access" \
+    "the canonical hold was not rendered"
+  assert_not_contains "$out" "no active child work proven" \
+    "the canonical hold was reduced to an empty child-work state"
+  pass "session start renders canonical decision and hold activity surfaces"
+}
+
 # --- endpoint liveness: tmux and herdr, live and dead ------------------------
 
 test_endpoint_liveness_tmux() {
@@ -2732,6 +2773,7 @@ test_session_start_preserves_transiently_unreadable_tmux
 test_session_start_preserves_proven_bare_shell_recovery
 test_session_start_relaunches_herdr_husk_secondmate
 test_canonical_activity_is_separate_from_retained_records
+test_canonical_activity_renders_decision_and_hold_surfaces
 test_status_tail_bounding
 test_status_tail_line_cap
 test_orphan_status_logs_are_printed

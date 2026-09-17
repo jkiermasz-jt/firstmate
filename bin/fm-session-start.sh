@@ -571,6 +571,12 @@ print_canonical_activity() {
     elif .valid != true then
       "current activity: unknown (inventory invalid: " +
       (((.reason // "") | if length > 0 then . else (.invalidity.kind // "unknown") end)) + ")"
+    elif .state == "captain_decision" and ((.decisions_open // []) | length) > 0 then
+      "current activity: captain decision required\n" +
+      ((.decisions_open // []) | map("decision: \(.id) \(.summary // .reason // .verb)") | join("\n"))
+    elif .state == "externally_held" and ((.holds // []) | length) > 0 then
+      "current activity: externally held\n" +
+      ((.holds // []) | map("held: \(.id) \(.reason // .title // "held")") | join("\n"))
     elif (.active_children | length) == 0 then
       "current activity: no active child work proven"
     else
