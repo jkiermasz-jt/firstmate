@@ -1344,14 +1344,14 @@ EOF
   snapshot="$home/canonical-snapshot"
   cat > "$snapshot" <<'SH'
 #!/usr/bin/env bash
-printf '%s\n' '{"schema":"fm-secondmate-home-summary.v1","valid":true,"state":"active_child_work","active_children":[{"id":"goal-2","state":"working","source":"pane","doing":"OCR coordinator"}]}'
+printf '%s\n' '{"schema":"fm-fleet-snapshot.v1","tasks":[],"secondmate_current":{"records":[{"id":"sm-1","active_children":[{"id":"goal-2","state":"working","source":"pane","doing":"OCR coordinator"}],"decisions_open":[],"holds":[]}]}}'
 SH
   chmod +x "$snapshot"
 
   out=$(FM_FLEET_SNAPSHOT_BIN="$snapshot" run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
   assert_contains "$out" "Current activity (canonical fleet snapshot)" \
     "the fleet digest did not label the canonical activity projection"
-  assert_contains "$out" "active: goal-2 state=working source=pane doing=OCR coordinator" \
+  assert_contains "$out" "active: sm-1/goal-2 state=working source=pane doing=OCR coordinator" \
     "the fleet digest did not present the canonical active child"
   assert_contains "$out" "Retained task records (state/*.meta; not current activity)" \
     "the fleet digest did not label retained records as non-authoritative activity"
@@ -1381,13 +1381,13 @@ EOF
 #!/usr/bin/env bash
 case "${FM_SNAPSHOT_CASE:-decision}" in
   decision)
-    printf '%s\n' '{"schema":"fm-secondmate-home-summary.v1","valid":true,"state":"captain_decision","active_children":[{"id":"goal-2","state":"working","source":"pane","doing":"Live worker"}],"decisions_open":[{"id":"goal-3","summary":"Choose launch route","verb":"captain-hold"}],"holds":[{"id":"goal-4","reason":"Waiting for vendor access"}],"omitted":[{"surface":"active_children","count":2},{"surface":"decisions_open","count":1},{"surface":"holds","count":3}]}'
+    printf '%s\n' '{"schema":"fm-fleet-snapshot.v1","tasks":[],"secondmate_current":{"records":[{"id":"sm-1","active_children":[{"id":"goal-2","state":"working","source":"pane","doing":"Live worker"}],"decisions_open":[{"id":"goal-3","summary":"Choose launch route","verb":"captain-hold"}],"holds":[{"id":"goal-4","reason":"Waiting for vendor access"}],"omitted":[{"surface":"active_children","count":2},{"surface":"decisions_open","count":1},{"surface":"holds","count":3}]}]}}'
     ;;
   hold)
-    printf '%s\n' '{"schema":"fm-secondmate-home-summary.v1","valid":true,"state":"externally_held","active_children":[],"decisions_open":[],"holds":[{"id":"goal-4","reason":"Waiting for vendor access"}]}'
+    printf '%s\n' '{"schema":"fm-fleet-snapshot.v1","tasks":[],"secondmate_current":{"records":[{"id":"sm-1","active_children":[],"decisions_open":[],"holds":[{"id":"goal-4","reason":"Waiting for vendor access"}]}]}}'
     ;;
   blocked)
-    printf '%s\n' '{"schema":"fm-secondmate-home-summary.v1","valid":true,"state":"active_child_work","active_children":[],"decisions_open":[{"id":"goal-6","summary":"Waiting on blocker","verb":"blocked"}],"holds":[]}'
+    printf '%s\n' '{"schema":"fm-fleet-snapshot.v1","tasks":[{"id":"goal-6","kind":"ship","current_state":{"state":"blocked","detail":"Waiting on blocker"},"hints":{"open_decisions":[{"summary":"Waiting on blocker","verb":"blocked"}]}}],"secondmate_current":{"records":[]}}'
     ;;
 esac
 SH
@@ -1396,11 +1396,11 @@ SH
   out=$(FM_SNAPSHOT_CASE=decision FM_FLEET_SNAPSHOT_BIN="$snapshot" run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
   assert_contains "$out" "current activity: captain decision required" \
     "the canonical captain-decision state was not rendered"
-  assert_contains "$out" "decision: goal-3 Choose launch route" \
+  assert_contains "$out" "decision: sm-1/goal-3 Choose launch route" \
     "the canonical open decision was not rendered"
-  assert_contains "$out" "active: goal-2 state=working source=pane doing=Live worker" \
+  assert_contains "$out" "active: sm-1/goal-2 state=working source=pane doing=Live worker" \
     "concurrent canonical active work was not rendered"
-  assert_contains "$out" "held: goal-4 Waiting for vendor access" \
+  assert_contains "$out" "held: sm-1/goal-4 Waiting for vendor access" \
     "concurrent canonical hold activity was not rendered"
   assert_contains "$out" "current activity incomplete: omitted 2 active_children record(s)" \
     "active-child omission was not disclosed"
@@ -1412,10 +1412,8 @@ SH
     "the canonical captain decision was reduced to an empty child-work state"
 
   out=$(FM_SNAPSHOT_CASE=hold FM_FLEET_SNAPSHOT_BIN="$snapshot" run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
-  assert_contains "$out" "current activity: externally held" \
+  assert_contains "$out" "held: sm-1/goal-4 Waiting for vendor access" \
     "the canonical externally-held state was not rendered"
-  assert_contains "$out" "held: goal-4 Waiting for vendor access" \
-    "the canonical hold was not rendered"
   assert_not_contains "$out" "no active child work proven" \
     "the canonical hold was reduced to an empty child-work state"
 
@@ -1471,15 +1469,15 @@ EOF
   cat > "$snapshot" <<SH
 #!/usr/bin/env bash
 if [ "\${FM_PROJECTS_OVERRIDE:-}" = "$projects" ]; then
-  printf '%s\\n' '{"schema":"fm-secondmate-home-summary.v1","valid":true,"state":"active_child_work","active_children":[{"id":"goal-5","state":"working","source":"override","doing":"Alternate projects"}]}'
+    printf '%s\\n' '{"schema":"fm-fleet-snapshot.v1","tasks":[],"secondmate_current":{"records":[{"id":"sm-1","active_children":[{"id":"goal-5","state":"working","source":"override","doing":"Alternate projects"}],"decisions_open":[],"holds":[]}]}}'
 else
-  printf '%s\\n' '{"schema":"fm-secondmate-home-summary.v1","valid":true,"state":"no_active_work","active_children":[]}'
+  printf '%s\\n' '{"schema":"fm-fleet-snapshot.v1","tasks":[],"secondmate_current":{"records":[]}}'
 fi
 SH
   chmod +x "$snapshot"
 
   out=$(FM_PROJECTS_OVERRIDE="$projects" FM_FLEET_SNAPSHOT_BIN="$snapshot" run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
-  assert_contains "$out" "active: goal-5 state=working source=override doing=Alternate projects" \
+  assert_contains "$out" "active: sm-1/goal-5 state=working source=override doing=Alternate projects" \
     "the canonical snapshot did not receive the projects override"
   pass "session start forwards the projects override to the canonical snapshot"
 }

@@ -61,24 +61,19 @@
 # Those nine names are also the runtime-bound stage list below, so a truncated
 # startup can name exactly which of them never ran.
 #
-# NO NETWORK ON THE BLOCKING PATH. This digest runs on a session-open hook that
+# NO UNBOUNDED NETWORK ON THE BLOCKING PATH. This digest runs on a session-open hook that
 # blocks session initialization, so anything it waits for is time the captain
 # waits before the first turn - and every external-network call it used to make
 # was individually unbounded. One unreachable remote secondmate could burn the
 # entire FM_SESSION_START_TIMEOUT and truncate the digest, so a slow network
 # could cost the work queue itself.
-# So no step between here and the last line below makes an external-network
-# call. The five that did - `gh auth status`, secondmate liveness, secondmate
-# convergence, pending remote handoff delivery, and the fleet-sync fetch - are
-# started as one detached bounded worker right after the lock (step 1) and
-# harvested at step 7 without ever blocking on it. The bounded inactive-outcome
-# startup scan joins that worker because its local current-state reads can also
-# be slow. bin/fm-startup-network.sh owns that stage and its safety argument;
-# bin/fm-bootstrap.sh and bin/fm-inactive-reconcile.sh remain the owners of the
-# work itself and still run it.
-# The digest is therefore composed from bounded local reads and local
-# subprocesses only, while slow network or inactive-state reconciliation delays
-# a reported check rather than startup.
+# The deferred network checks remain outside the digest's blocking path, while
+# the canonical fleet snapshot owns its own bounded cross-home collection and
+# the whole snapshot call has a separate local timeout. bin/fm-startup-network.sh
+# owns the deferred stage and its safety argument; bin/fm-bootstrap.sh and
+# bin/fm-inactive-reconcile.sh remain the owners of the work itself and still run it.
+# The digest is therefore composed from bounded snapshot, local, and subprocess
+# work, while slow deferred checks delay a reported check rather than startup.
 # What this deliberately trades: on a slow network the digest prints "IN
 # PROGRESS" and names exactly which checks are not yet confirmed, instead of
 # waiting for them. It never reports an unconfirmed check as passed.
@@ -545,9 +540,8 @@ print_status_tail() {
   done < <(tail -n "$STATUS_TAIL" "$status")
 }
 
-# The structured fleet snapshot owns current activity. This local-only summary
-# mode reads the current home without collecting registered remote homes, so
-# session start keeps its no-network-on-the-blocking-path guarantee.
+# The structured fleet snapshot owns current activity, including the bounded
+# current projections of registered secondmate homes.
 CANONICAL_SNAPSHOT_BIN=${FM_FLEET_SNAPSHOT_BIN:-$SCRIPT_DIR/fm-fleet-snapshot.sh}
 print_canonical_activity() {
   local snapshot current projects
@@ -569,26 +563,40 @@ print_canonical_activity() {
     FM_DATA_OVERRIDE="$DATA" \
     FM_PROJECTS_OVERRIDE="$projects" \
     FM_CONFIG_OVERRIDE="$CONFIG" \
-    "$CANONICAL_SNAPSHOT_BIN" --secondmate-home-summary 2>/dev/null); then
+    "$CANONICAL_SNAPSHOT_BIN" --json 2>/dev/null); then
     printf 'current activity: unavailable (canonical fleet snapshot failed)\n'
     return 0
   fi
   if ! current=$(printf '%s\n' "$snapshot" | jq -er '
-    if .schema != "fm-secondmate-home-summary.v1" then
+    if .schema != "fm-fleet-snapshot.v1" then
       error("unsupported canonical fleet snapshot schema")
-    elif .valid != true then
-      "current activity: unknown (inventory invalid: " +
-      (((.reason // "") | if length > 0 then . else (.invalidity.kind // "unknown") end)) + ")"
     else
-      ((.active_children // []) as $active
-       | (.decisions_open // []) as $decisions
-       | (.holds // []) as $holds
-       | (.omitted // []) as $omitted
-       | ((.state == "captain_decision") or
-          any($decisions[]?; .verb == "needs-decision" or .verb == "captain-hold")) as $captain_decision
+      (([.tasks[]?
+         | select(.kind != "secondmate" and .current_state.state == "working")
+         | {id:.id,state:.current_state.state,source:(.current_state.source // "unknown"),doing:(.current_state.detail // .current_state.state)}]
+        + [(.secondmate_current.records // [])[] as $mate
+           | $mate.active_children[]?
+           | {id:($mate.id + "/" + .id),state:(.state // "working"),source:(.source // "secondmate-home"),doing:(.doing // .state)}]) as $active
+       | (([.tasks[]? as $task
+           | ($task.hints.open_decisions // [])[]
+           | {id:$task.id,verb,summary:(.summary // .reason // .verb)}]
+          + [(.secondmate_current.records // [])[] as $mate
+             | $mate.decisions_open[]?
+             | {id:($mate.id + "/" + .id),verb,summary:(.summary // .reason // .verb)}])) as $decisions
+       | (([.tasks[]?
+           | select(.kind != "secondmate" and (.current_state.state == "parked" or .current_state.state == "paused" or .current_state.state == "blocked"))
+           | {id:.id,reason:(.current_state.detail // .current_state.state)}]
+          + [(.secondmate_current.records // [])[] as $mate
+             | $mate.holds[]?
+             | {id:($mate.id + "/" + .id),reason:(.reason // .title // "held")}])) as $holds
+       | (([(.secondmate_current.records // [])[] as $mate
+             | $mate.omitted[]?
+             | select(.surface == "active_children" or .surface == "decisions_open" or .surface == "holds")
+             | {surface:(.surface),count:.count,owner:$mate.id}])) as $omitted
+       | any($decisions[]?; .verb == "needs-decision" or .verb == "captain-hold") as $captain_decision
        | [
            (if ($active | length) > 0 then
-              $active | map("active: \(.id) state=\(.state) source=\(.source) doing=\(.doing // .state)")
+              $active | map("active: \(.id) state=\(.state) source=\(.source) doing=\(.doing)")
             else [] end),
            (if ($decisions | length) > 0 then
               [(if $captain_decision then "current activity: captain decision required" else "current activity: decisions open" end)] +
@@ -597,10 +605,9 @@ print_canonical_activity() {
            (if ($holds | length) > 0 then
               ["current activity: externally held"] +
               ($holds | map("held: \(.id) \(.reason // .title // "held")"))
-            else [] end),
+           else [] end),
            ($omitted
-            | map(select(.surface == "active_children" or .surface == "decisions_open" or .surface == "holds")
-                  | "current activity incomplete: omitted \(.count) \(.surface) record(s)"))
+            | map("current activity incomplete: omitted \(.count) \(.surface) record(s)"))
          ]
        | add
        | if length == 0 then ["current activity: no active child work proven"] else . end
@@ -611,8 +618,7 @@ print_canonical_activity() {
     return 0
   fi
   printf '%s\n' "$current"
-  printf 'registered secondmate current activity is not inferred from retained parent records; use %s --json for the cross-home projection.\n' \
-    "$SCRIPT_DIR/fm-fleet-snapshot.sh"
+  printf 'registered secondmate current activity comes from the canonical cross-home projection, never retained parent records.\n'
 }
 
 hash_file_sha256() {
