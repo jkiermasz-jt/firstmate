@@ -602,6 +602,9 @@ print_canonical_activity() {
                    and ((.decisions_open // []) | length) == 0
                    and ((.holds // []) | length) == 0)
           | "current activity: unavailable (secondmate \(.id): \(.current.reason // "current state unknown"))"]) as $unknown
+       | ([.tasks[]?
+          | select(.kind != "secondmate" and .current_state.state == "unknown")
+          | "current activity: unavailable (task \(.id): \(.current_state.detail // "current state unknown"))"]) as $unknown_main
        | ([(if (($secondmate_current.truncated // 0) > 0) then
              "current activity incomplete: omitted \(.secondmate_current.truncated) registered secondmate record(s)"
            else empty end),
@@ -624,6 +627,7 @@ print_canonical_activity() {
            ($omitted
             | map("current activity incomplete: omitted \(.count) \(.surface) record(s)")),
            $unknown,
+           $unknown_main,
            $secondmate_omitted
          ]
        | add

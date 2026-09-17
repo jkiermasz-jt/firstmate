@@ -1399,6 +1399,9 @@ case "${FM_SNAPSHOT_CASE:-decision}" in
   unknown)
     printf '%s\n' '{"schema":"fm-fleet-snapshot.v1","tasks":[],"secondmate_current":{"records":[{"id":"sm-unknown","current":{"state":"unknown","reason":"child current state unavailable"},"active_children":[],"decisions_open":[],"holds":[]}]}}'
     ;;
+  unknown-main)
+    printf '%s\n' '{"schema":"fm-fleet-snapshot.v1","tasks":[{"id":"task-unknown","kind":"ship","current_state":{"state":"unknown","detail":"current state unavailable"}}],"secondmate_current":{"records":[]}}'
+    ;;
   truncated)
     printf '%s\n' '{"schema":"fm-fleet-snapshot.v1","tasks":[],"secondmate_current":{"records":[],"truncated":1}}'
     ;;
@@ -1443,6 +1446,12 @@ SH
     "an unknown secondmate state was rendered as inactive"
   assert_not_contains "$out" "no active child work proven" \
     "an unknown secondmate state was reduced to an inactive result"
+
+  out=$(FM_SNAPSHOT_CASE=unknown-main FM_FLEET_SNAPSHOT_BIN="$snapshot" run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "current activity: unavailable (task task-unknown: current state unavailable)" \
+    "an unknown main-task state was rendered as inactive"
+  assert_not_contains "$out" "no active child work proven" \
+    "an unknown main-task state was reduced to an inactive result"
 
   out=$(FM_SNAPSHOT_CASE=truncated FM_FLEET_SNAPSHOT_BIN="$snapshot" run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
   assert_contains "$out" "current activity incomplete: omitted 1 registered secondmate record(s)" \
