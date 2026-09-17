@@ -765,7 +765,7 @@ EOF
 # --- lock refusal: read-only path --------------------------------------------
 
 test_lock_refusal_read_only_path() {
-  local rec root home fakebin holder_pid out status
+  local rec root home fakebin holder_pid out status cache_dir
   rec=$(new_world lock-refusal)
   IFS='|' read -r root home fakebin <<EOF
 $rec
@@ -781,6 +781,9 @@ EOF
   mkdir -p "$home/other-secondmate/state"
   fm_write_secondmate_meta "$home/state/sm-x.meta" "$home/other-secondmate" "firstmate:fm-sm-x" alpha
   append_wake "$home/state" signal sm-x "done: surfaced before refusal" || fail "seed wake failed"
+  printf -- '- remote-sm - remote-sm delivery (host: remote-host; root: /remote/root; home: /remote/home; scope: test work; projects: alpha; added 2026-08-02)\n' \
+    > "$home/data/secondmates.md"
+  cache_dir="$home/secondmate-summary-cache"
   git -C "$root" checkout -q -B fm/read-only-tangle
 
   sleep 300 &
@@ -788,7 +791,8 @@ EOF
   printf '%s\n' "$holder_pid" > "$home/state/.lock"
 
   status=0
-  out=$(run_session_start "$home" "$root" "$fakebin:$BASE_PATH") || status=$?
+  out=$(FM_FLEET_SNAPSHOT_BIN="$ROOT/bin/fm-fleet-snapshot.sh" \
+    FM_SNAPSHOT_CACHE_DIR="$cache_dir" run_session_start "$home" "$root" "$fakebin:$BASE_PATH") || status=$?
   kill "$holder_pid" 2>/dev/null || true
   wait "$holder_pid" 2>/dev/null || true
 
@@ -811,6 +815,9 @@ EOF
   # tasks-axi, so bootstrap's own read-only tool-detection line fires
   # deterministically regardless of what is installed on the test host).
   assert_contains "$out" "MISSING: tasks-axi (install:" "detect-only bootstrap diagnostics did not run on the read-only path"
+  assert_contains "$out" "current activity incomplete: omitted 1 remote secondmate record(s)" \
+    "read-only canonical activity did not disclose skipped remote secondmate coverage"
+  assert_absent "$cache_dir" "read-only canonical activity created a remote summary cache"
 
   # The mutating secondmate sweep must NOT have run: no SECONDMATE_SYNC/
   # NUDGE_SECONDMATES line, and the sowed secondmate meta's target dir is
@@ -1389,6 +1396,12 @@ case "${FM_SNAPSHOT_CASE:-decision}" in
   blocked)
     printf '%s\n' '{"schema":"fm-fleet-snapshot.v1","tasks":[{"id":"goal-6","kind":"ship","current_state":{"state":"blocked","detail":"Waiting on blocker"},"hints":{"open_decisions":[{"summary":"Waiting on blocker","verb":"blocked"}]}}],"secondmate_current":{"records":[]}}'
     ;;
+  unknown)
+    printf '%s\n' '{"schema":"fm-fleet-snapshot.v1","tasks":[],"secondmate_current":{"records":[{"id":"sm-unknown","current":{"state":"unknown","reason":"child current state unavailable"},"active_children":[],"decisions_open":[],"holds":[]}]}}'
+    ;;
+  truncated)
+    printf '%s\n' '{"schema":"fm-fleet-snapshot.v1","tasks":[],"secondmate_current":{"records":[],"truncated":1}}'
+    ;;
 esac
 SH
   chmod +x "$snapshot"
@@ -1422,6 +1435,18 @@ SH
     "a blocked decision entry was not given a neutral activity label"
   assert_not_contains "$out" "current activity: captain decision required" \
     "a blocked decision entry was mislabelled as a captain decision"
+
+  out=$(FM_SNAPSHOT_CASE=unknown FM_FLEET_SNAPSHOT_BIN="$snapshot" run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "current activity: unavailable (secondmate sm-unknown: child current state unavailable)" \
+    "an unknown secondmate state was rendered as inactive"
+  assert_not_contains "$out" "no active child work proven" \
+    "an unknown secondmate state was reduced to an inactive result"
+
+  out=$(FM_SNAPSHOT_CASE=truncated FM_FLEET_SNAPSHOT_BIN="$snapshot" run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "current activity incomplete: omitted 1 registered secondmate record(s)" \
+    "secondmate snapshot truncation was not disclosed"
+  assert_not_contains "$out" "no active child work proven" \
+    "a truncated secondmate snapshot was reduced to an inactive result"
   pass "session start renders canonical decision and hold activity surfaces"
 }
 

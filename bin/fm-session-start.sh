@@ -563,6 +563,7 @@ print_canonical_activity() {
     FM_DATA_OVERRIDE="$DATA" \
     FM_PROJECTS_OVERRIDE="$projects" \
     FM_CONFIG_OVERRIDE="$CONFIG" \
+    FM_SNAPSHOT_SKIP_REMOTE="$READ_ONLY" \
     "$CANONICAL_SNAPSHOT_BIN" --json 2>/dev/null); then
     printf 'current activity: unavailable (canonical fleet snapshot failed)\n'
     return 0
@@ -571,7 +572,8 @@ print_canonical_activity() {
     if .schema != "fm-fleet-snapshot.v1" then
       error("unsupported canonical fleet snapshot schema")
     else
-      (([.tasks[]?
+      (.secondmate_current // {}) as $secondmate_current
+      | (([.tasks[]?
          | select(.kind != "secondmate" and .current_state.state == "working")
          | {id:.id,state:.current_state.state,source:(.current_state.source // "unknown"),doing:(.current_state.detail // .current_state.state)}]
         + [(.secondmate_current.records // [])[] as $mate
@@ -593,6 +595,18 @@ print_canonical_activity() {
              | $mate.omitted[]?
              | select(.surface == "active_children" or .surface == "decisions_open" or .surface == "holds")
              | {surface:(.surface),count:.count,owner:$mate.id}])) as $omitted
+       | ([($secondmate_current.records // [])[]
+          | select((.current.state // "") == "unknown"
+                   and ((.active_children // []) | length) == 0
+                   and ((.decisions_open // []) | length) == 0
+                   and ((.holds // []) | length) == 0)
+          | "current activity: unavailable (secondmate \(.id): \(.current.reason // "current state unknown"))"]) as $unknown
+       | ([(if (($secondmate_current.truncated // 0) > 0) then
+             "current activity incomplete: omitted \(.secondmate_current.truncated) registered secondmate record(s)"
+           else empty end),
+           (if (($secondmate_current.remote_skipped // 0) > 0) then
+             "current activity incomplete: omitted \(.secondmate_current.remote_skipped) remote secondmate record(s)"
+           else empty end)]) as $secondmate_omitted
        | any($decisions[]?; .verb == "needs-decision" or .verb == "captain-hold") as $captain_decision
        | [
            (if ($active | length) > 0 then
@@ -607,7 +621,9 @@ print_canonical_activity() {
               ($holds | map("held: \(.id) \(.reason // .title // "held")"))
            else [] end),
            ($omitted
-            | map("current activity incomplete: omitted \(.count) \(.surface) record(s)"))
+            | map("current activity incomplete: omitted \(.count) \(.surface) record(s)")),
+           $unknown,
+           $secondmate_omitted
          ]
        | add
        | if length == 0 then ["current activity: no active child work proven"] else . end
