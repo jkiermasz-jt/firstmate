@@ -72,7 +72,9 @@ case "${1:-}" in
     for a in "$@"; do case "$a" in *cursor_y*) printf '1\n'; exit 0 ;; esac; done
     printf 'fakepane\n'; exit 0 ;;
   capture-pane) printf '╭────╮\n│    │\n╰────╯\n'; exit 0 ;;
-  list-windows) exit 0 ;;
+  list-windows)
+    [ "${FM_FAKE_TMUX_MISSING:-0}" = 1 ] || printf '%s\n' "${FM_FAKE_TMUX_WINDOW_NAME:-}"
+    exit 0 ;;
 esac
 exit 0
 SH
@@ -939,11 +941,15 @@ test_unknown_backend_state_uses_capture_fallback() {
   local backend
   for backend in tmux zellij; do
     (
-      local home state corr rec sm_home
+      local home state corr rec sm_home fb
       home=$(setup_parent "fallback-$backend")
       state="$home/state"
       sm_home="$home/sm"
       mkdir -p "$sm_home/state"
+      if [ "$backend" = tmux ]; then
+        fb=$(make_stubs "$home")
+        export PATH="$fb:$PATH" FM_FAKE_TMUX_WINDOW_NAME=fm-hibit
+      fi
       export FM_PENDING_REPLY_GRACE_SECS=10
       # These fixture overrides are intentionally scoped to the isolated subshell.
       # shellcheck disable=SC2030,SC2031
@@ -985,11 +991,13 @@ test_unknown_backend_state_uses_capture_fallback() {
 }
 
 test_kimi_capture_fallback_uses_recorded_harness() (
-  local home state corr rec sm_home
+  local home state corr rec sm_home fb
   home=$(setup_parent kimi-fallback)
   state="$home/state"
   sm_home="$home/sm"
   mkdir -p "$sm_home/state"
+  fb=$(make_stubs "$home")
+  export PATH="$fb:$PATH" FM_FAKE_TMUX_WINDOW_NAME=fm-hibit
   # This fixture clock is intentionally scoped to the isolated subshell.
   # shellcheck disable=SC2030,SC2031
   export FM_PENDING_REPLY_NOW=10020
@@ -1017,9 +1025,11 @@ test_kimi_capture_fallback_uses_recorded_harness() (
 
 test_tick_skips_terminal_and_reuses_target_observation() {
   (
-    local home state open1 open2 resolved escalated rec probe_log probes scan_log scans snapshot
+    local home state open1 open2 resolved escalated rec probe_log probes scan_log scans snapshot fb
     home=$(setup_parent observation-cache)
     state="$home/state"
+    fb=$(make_stubs "$home")
+    export PATH="$fb:$PATH" FM_FAKE_TMUX_WINDOW_NAME=fm-hibit
     probe_log="$home/backend-probes.log"
     scan_log="$home/status-scans.log"
     : > "$probe_log"
