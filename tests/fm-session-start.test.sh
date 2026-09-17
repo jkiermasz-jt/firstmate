@@ -1427,6 +1427,35 @@ SH
   pass "session start renders canonical decision and hold activity surfaces"
 }
 
+test_canonical_activity_snapshot_is_bounded() {
+  local rec root home fakebin out snapshot
+  rec=$(new_world canonical-activity-timeout)
+  IFS='|' read -r root home fakebin <<EOF
+$rec
+EOF
+  make_fake_toolchain "$fakebin"
+  make_fake_ps_claude "$fakebin"
+
+  snapshot="$home/canonical-snapshot"
+  cat > "$snapshot" <<'SH'
+#!/usr/bin/env bash
+sleep 5
+printf '%s\n' '{"schema":"fm-secondmate-home-summary.v1","valid":true,"state":"no_active_work","active_children":[]}'
+SH
+  chmod +x "$snapshot"
+
+  out=$(FM_TIMEOUT_MECHANISM_OVERRIDE=bash \
+    FM_SESSION_START_CANONICAL_SNAPSHOT_TIMEOUT=1 \
+    FM_FLEET_SNAPSHOT_BIN="$snapshot" run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "Current activity (canonical fleet snapshot)" \
+    "the bounded canonical snapshot lost its section heading"
+  assert_contains "$out" "current activity: unavailable (canonical fleet snapshot failed)" \
+    "a slow canonical snapshot was not reported unavailable"
+  assert_contains "$out" "Retained task records (state/*.meta; not current activity)" \
+    "a timed-out canonical snapshot consumed the rest of session start"
+  pass "session start bounds the canonical current-activity snapshot"
+}
+
 test_canonical_activity_uses_projects_override() {
   local rec root home fakebin out snapshot projects
   rec=$(new_world canonical-activity-projects-override)
@@ -2821,6 +2850,7 @@ test_session_start_preserves_proven_bare_shell_recovery
 test_session_start_relaunches_herdr_husk_secondmate
 test_canonical_activity_is_separate_from_retained_records
 test_canonical_activity_renders_decision_and_hold_surfaces
+test_canonical_activity_snapshot_is_bounded
 test_canonical_activity_uses_projects_override
 test_status_tail_bounding
 test_status_tail_line_cap

@@ -176,6 +176,10 @@
 # deliberately sits OUTSIDE that bound,
 # in its own process group under its own aggregate deadline, so a truncated
 # digest neither waits for it nor orphans it unbounded. The
+# canonical current-activity snapshot has its own bounded child call
+# (FM_SESSION_START_CANONICAL_SNAPSHOT_TIMEOUT, default 30s), so slow local
+# current-state reads report an unavailable projection instead of consuming the
+# whole session-start budget.
 # child writes the digest straight to this script's stdout, so everything it
 # emitted before the bound was hit is already delivered; the parent then prints
 # a loud STARTUP TRUNCATED banner naming the stage that did not finish and the
@@ -263,6 +267,10 @@ done
 # names the stage it is entering, and the parent reports every stage at or after
 # that one as never emitted. Keep it in the exact order the digest prints.
 SESSION_START_STAGES='lock bootstrap wake-queue supervision-instructions read-once fleet-state network-checks context next-step'
+SESSION_START_CANONICAL_SNAPSHOT_TIMEOUT=${FM_SESSION_START_CANONICAL_SNAPSHOT_TIMEOUT:-30}
+case "$SESSION_START_CANONICAL_SNAPSHOT_TIMEOUT" in
+  ''|*[!0-9]*|0) SESSION_START_CANONICAL_SNAPSHOT_TIMEOUT=30 ;;
+esac
 
 stage() {  # <stage-name>: breadcrumb for the parent's truncation banner
   [ -n "${FM_SESSION_START_STAGE_FILE:-}" ] || return 0
@@ -554,7 +562,7 @@ print_canonical_activity() {
       "$CANONICAL_SNAPSHOT_BIN"
     return 0
   fi
-  if ! snapshot=$(env \
+  if ! snapshot=$(fm_run_timed "$SESSION_START_CANONICAL_SNAPSHOT_TIMEOUT" env \
     FM_ROOT_OVERRIDE="$FM_ROOT" \
     FM_HOME="$FM_HOME" \
     FM_STATE_OVERRIDE="$STATE" \
