@@ -1052,6 +1052,7 @@ test_tick_skips_terminal_and_reuses_target_observation() {
     mkdir -p "$home/escalated/state"
     printf 'done [corr=%s]: wrong home\n' "$escalated" > "$home/escalated/state/child.status"
     fm_write_secondmate_meta "$state/hibit.meta" "$home/hibit" "sess:fm-hibit"
+    printf 'spawn_gen=stable-generation\n' >> "$state/hibit.meta"
     fm_write_secondmate_meta "$state/resolved.meta" "$home/resolved" "sess:fm-resolved"
     fm_write_secondmate_meta "$state/escalated.meta" "$home/escalated" "sess:fm-escalated"
     # Runtime overrides called indirectly by the pending-reply tick.
@@ -1114,6 +1115,84 @@ test_tick_escalates_confirmed_stopped_secondmate() (
     || fail "stopped secondmate escalation must be visible to the parent"
   pass "tick escalates active routed work when the secondmate agent stopped"
 )
+
+test_stopped_remote_secondmate_waits_for_reply_watermark() {
+  local home state corr rec
+  home=$(setup_parent stopped-remote-watermark)
+  state="$home/state"
+  fm_write_meta "$state/ios.meta" \
+    "window=fm-remote:w1:p1" "harness=claude" "kind=secondmate" "mode=secondmate" \
+    "remote_host=remote-mac" "remote_root=/remote/root" "remote_backend=herdr"
+  export FM_PENDING_REPLY_NOW=10300
+  corr=$(fm_pending_reply_create "$home" "$state" ios "inspect the release")
+  fm_pending_reply_mark_delivered "$state" "$corr"
+  fm_pending_reply_mark_turn_completed "$state" "$corr" request
+  rec=$(fm_pending_reply_path "$state" "$corr")
+
+  fm_pending_reply_escalate_agent_stopped "$state" "$corr" || true
+  [ "$(phase_of "$state" "$corr")" = awaiting_report ] \
+    || fail "a stopped remote mate without a caught-up watermark must remain unknown"
+  [ ! -s "$state/ios.status" ] \
+    || fail "a stopped remote mate without a caught-up watermark must not escalate"
+
+  fm_pending_reply_note_remote_channel_caught_up "$state" ios 10299
+  fm_pending_reply_escalate_agent_stopped "$state" "$corr" || true
+  [ "$(phase_of "$state" "$corr")" = awaiting_report ] \
+    || fail "a watermark from before the completed turn must not escalate"
+
+  fm_pending_reply_note_remote_channel_caught_up "$state" ios \
+    "$(fm_pending_reply_get "$rec" request_turn_completed_epoch)"
+  fm_pending_reply_escalate_agent_stopped "$state" "$corr" \
+    || fail "a caught-up remote stopped endpoint should escalate"
+  [ "$(phase_of "$state" "$corr")" = escalated ] \
+    || fail "a caught-up remote stopped endpoint should enter escalated phase"
+  pass "stopped remote pending replies wait for the reply-channel watermark"
+}
+
+test_tick_endpoint_cache_is_bound_to_generation() {
+  (
+    local home state open1 open2 old_corr new_corr probe_count
+    home=$(setup_parent endpoint-generation-cache)
+    state="$home/state"
+    export FM_PENDING_REPLY_NOW=10400
+    open1=$(fm_pending_reply_create "$home" "$state" hibit "old generation")
+    open2=$(fm_pending_reply_create "$home" "$state" hibit "new generation")
+    fm_pending_reply_mark_delivered "$state" "$open1"
+    fm_pending_reply_mark_delivered "$state" "$open2"
+    if [[ "$open1" < "$open2" ]]; then
+      old_corr=$open1
+      new_corr=$open2
+    else
+      old_corr=$open2
+      new_corr=$open1
+    fi
+    fm_write_secondmate_meta "$state/hibit.meta" "$home/hibit" "sess:fm-hibit"
+    printf 'spawn_gen=old-generation\n' >> "$state/hibit.meta"
+    printf '0\n' > "$home/probe-count"
+    fm_backend_agent_state() {
+      local count
+      count=$(cat "$home/probe-count")
+      count=$((count + 1))
+      printf '%s\n' "$count" > "$home/probe-count"
+      if [ "$count" -eq 1 ]; then
+        sed -i.bak 's/^spawn_gen=.*/spawn_gen=new-generation/' "$state/hibit.meta"
+        printf 'dead'
+      else
+        printf 'alive'
+      fi
+    }
+    fm_backend_busy_state() { printf 'busy'; }
+    fm_pending_reply_tick "$state"
+    [ "$(phase_of "$state" "$old_corr")" = escalated ] \
+      || fail "the stopped old generation should escalate"
+    [ "$(phase_of "$state" "$new_corr")" = awaiting_report ] \
+      || fail "the live replacement generation must not reuse the old stopped verdict"
+    probe_count=$(cat "$home/probe-count")
+    [ "$probe_count" -eq 2 ] \
+      || fail "distinct endpoint generations must be probed separately, got $probe_count"
+  ) || fail "endpoint-generation cache regression failed"
+  pass "pending-reply endpoint verdicts stay within one generation"
+}
 
 test_correlations_reuse_only_for_matching_open_task() {
   local dir fb log home state got corr1 corr2 corr3 rec
@@ -1629,6 +1708,8 @@ test_unknown_backend_state_uses_capture_fallback
 test_kimi_capture_fallback_uses_recorded_harness
 test_tick_skips_terminal_and_reuses_target_observation
 test_tick_escalates_confirmed_stopped_secondmate
+test_stopped_remote_secondmate_waits_for_reply_watermark
+test_tick_endpoint_cache_is_bound_to_generation
 test_correlations_reuse_only_for_matching_open_task
 test_tick_end_to_end_missed_then_escalate
 test_failed_send_discards_undelivered_expectation

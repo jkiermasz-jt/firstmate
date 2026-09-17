@@ -1292,10 +1292,23 @@ fm_pending_reply_escalate_agent_stopped() {  # <state-dir> <corr_id>
 
 _fm_pending_reply_escalate_agent_stopped_locked() {  # <state-dir> <corr_id>
   local state=$1 corr=$2 rec phase
+  local completed task_id
   rec=$(fm_pending_reply_path "$state" "$corr")
   [ -f "$rec" ] || return 1
   phase=$(fm_pending_reply_get "$rec" phase)
   case "$phase" in awaiting_report|recovery_sent) ;; *) return 0 ;; esac
+  if _fm_pending_reply_try_resolve_locked "$state" "$corr"; then
+    return 0
+  fi
+  task_id=$(fm_pending_reply_get "$rec" task_id)
+  if fm_pending_reply_target_is_remote "$state" "$task_id"; then
+    case "$phase" in
+      awaiting_report) completed=$(fm_pending_reply_get "$rec" request_turn_completed_epoch) ;;
+      recovery_sent) completed=$(fm_pending_reply_get "$rec" recovery_turn_completed_epoch) ;;
+    esac
+    [ -n "$completed" ] || return 1
+    fm_pending_reply_missing_report_is_evidence "$state" "$task_id" "$completed" || return 1
+  fi
   _fm_pending_reply_publish_escalation_locked "$state" "$corr" agent-stopped
 }
 
@@ -1464,9 +1477,9 @@ fm_pending_reply_tick_one() {  # <state-dir> <corr_id> <busy_state> [secondmate-
 # Never scrapes secondmate conversation; uses only parent status, backend busy
 # state, and optional secondmate-home wrong-home path checks.
 fm_pending_reply_tick() {  # <state-dir>
-  local state=$1 dir rec corr task_id phase delivered meta backend target label busy sm_home harness remote_host
-  local observation observation_task endpoint_state endpoint_task found i
-  local -a observation_tasks=() observation_values=() endpoint_tasks=() endpoint_values=()
+  local state=$1 dir rec corr task_id phase delivered meta backend target label busy sm_home harness remote_host remote_root spawn_gen
+  local observation observation_task endpoint_state endpoint_key cached_endpoint_key found i
+  local -a observation_tasks=() observation_values=() endpoint_keys=() endpoint_values=()
   dir=$(fm_pending_reply_dir "$state")
   [ -d "$dir" ] || return 0
   for rec in "$dir"/*; do
@@ -1548,11 +1561,15 @@ fm_pending_reply_tick() {  # <state-dir>
       fi
       if [ -n "$target" ]; then
         label="fm-$task_id"
+        remote_root=$(fm_meta_get "$meta" remote_root)
+        spawn_gen=$(fm_meta_get "$meta" spawn_gen)
+        endpoint_key="$backend|$target|$remote_host|$remote_root|$spawn_gen"
+        [ -n "$spawn_gen" ] || endpoint_key="$endpoint_key|record:$corr"
         endpoint_state=unknown
         found=0
-        for ((i = 0; i < ${#endpoint_tasks[@]}; i++)); do
-          endpoint_task=${endpoint_tasks[$i]}
-          [ "$endpoint_task" = "$task_id" ] || continue
+        for ((i = 0; i < ${#endpoint_keys[@]}; i++)); do
+          cached_endpoint_key=${endpoint_keys[$i]}
+          [ "$cached_endpoint_key" = "$endpoint_key" ] || continue
           endpoint_state=${endpoint_values[$i]}
           found=1
           break
@@ -1565,7 +1582,7 @@ fm_pending_reply_tick() {  # <state-dir>
             endpoint_state=$(fm_backend_agent_state "$backend" "$target" 2>/dev/null || printf 'unknown')
           fi
           case "$endpoint_state" in alive|dead|missing|ambiguous|unreadable|unverified) ;; *) endpoint_state=unknown ;; esac
-          endpoint_tasks+=("$task_id")
+          endpoint_keys+=("$endpoint_key")
           endpoint_values+=("$endpoint_state")
         fi
         case "$endpoint_state" in
