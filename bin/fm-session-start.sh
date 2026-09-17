@@ -598,10 +598,7 @@ print_canonical_activity() {
              | select(.surface == "active_children" or .surface == "decisions_open" or .surface == "holds")
              | {surface:(.surface),count:.count,owner:$mate.id}])) as $omitted
        | ([($secondmate_current.records // [])[]
-          | select((.current.state // "") == "unknown"
-                   and ((.active_children // []) | length) == 0
-                   and ((.decisions_open // []) | length) == 0
-                   and ((.holds // []) | length) == 0)
+          | select((.current.state // "") == "unknown")
           | "current activity: unavailable (secondmate \(.id): \(.current.reason // "current state unknown"))"]) as $unknown
        | ([.tasks[]?
           | select(.kind != "secondmate" and .current_state.state == "unknown")

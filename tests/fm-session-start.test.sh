@@ -1402,6 +1402,9 @@ case "${FM_SNAPSHOT_CASE:-decision}" in
   unknown)
     printf '%s\n' '{"schema":"fm-fleet-snapshot.v1","tasks":[],"secondmate_current":{"records":[{"id":"sm-unknown","current":{"state":"unknown","reason":"child current state unavailable"},"active_children":[],"decisions_open":[],"holds":[]}]}}'
     ;;
+  mixed-unknown)
+    printf '%s\n' '{"schema":"fm-fleet-snapshot.v1","tasks":[],"secondmate_current":{"records":[{"id":"sm-mixed","current":{"state":"unknown","reason":"child current state timed out"},"active_children":[{"id":"goal-live","state":"working","source":"pane","doing":"Live child"}],"decisions_open":[],"holds":[]}]}}'
+    ;;
   unknown-main)
     printf '%s\n' '{"schema":"fm-fleet-snapshot.v1","tasks":[{"id":"task-unknown","kind":"ship","current_state":{"state":"unknown","detail":"current state unavailable"}}],"secondmate_current":{"records":[]}}'
     ;;
@@ -1466,6 +1469,14 @@ SH
     "an unknown secondmate state was rendered as inactive"
   assert_not_contains "$out" "no active child work proven" \
     "an unknown secondmate state was reduced to an inactive result"
+
+  out=$(FM_SNAPSHOT_CASE=mixed-unknown FM_FLEET_SNAPSHOT_BIN="$snapshot" run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
+  assert_contains "$out" "active: sm-mixed/goal-live state=working source=pane doing=Live child" \
+    "visible activity disappeared when a sibling secondmate state was unknown"
+  assert_contains "$out" "current activity: unavailable (secondmate sm-mixed: child current state timed out)" \
+    "a mixed unknown secondmate state was hidden by visible activity"
+  assert_not_contains "$out" "no active child work proven" \
+    "mixed unknown secondmate activity was reduced to complete evidence"
 
   out=$(FM_SNAPSHOT_CASE=unknown-main FM_FLEET_SNAPSHOT_BIN="$snapshot" run_session_start "$home" "$root" "$fakebin:$BASE_PATH")
   assert_contains "$out" "current activity: unavailable (task task-unknown: current state unavailable)" \

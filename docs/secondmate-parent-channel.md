@@ -42,6 +42,8 @@ A missed-reply escalation includes the complete first sighting path and line num
 
 Persistent-secondmate liveness is reconciled before a status log is treated as current, so a confirmed dead or missing endpoint cannot remain `working` merely because its readable shell or stale status log survives.
 Only a recovery-grade `dead` or `missing` result changes that conclusion; ambiguous, unreadable, and unverified endpoints keep their existing conservative path.
+The pending-reply tick is the narrow mid-session exception: local routes use the recovery-grade endpoint classifier, while remote routes use their host-local control boundary.
+An unresolved remote reply remains unknown until its reply mirror watermark reaches the completed turn, even when the endpoint has stopped.
 An unresolved routed reply on a confirmed stopped endpoint is escalated as `pending-reply-agent-stopped`, so the parent receives a durable terminal boundary instead of waiting on a child that can no longer report.
 `tests/fm-crew-state.test.sh` and `tests/fm-pending-reply.test.sh` cover this boundary.
 
