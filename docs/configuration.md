@@ -362,7 +362,8 @@ For omp secondmate launches, `fm-spawn.sh` passes one `-e` for the generated sta
 The optional local, gitignored `config/claude-permission-mode` holds one token selecting the permission flag every Claude worker launch carries: crewmates, scouts, Claude secondmates, and control-plane relaunches alike.
 The token is the file's whitespace-trimmed content.
 `bypass` keeps today's launch, `claude --dangerously-skip-permissions`, and is also the default when the file is absent, so an unconfigured home launches byte-for-byte as before.
-`auto` replaces that flag with `--permission-mode auto`, Claude Code's classifier-reviewed permission mode, for a captain who refuses to run workers in bypass mode; every other part of the Claude launch, including its environment prefix, inline settings, model, and effort flags, is unchanged.
+`auto` replaces that flag with `--permission-mode auto`, Claude Code's classifier-reviewed permission mode, for a captain who refuses to run workers in bypass mode; ordinary task-worker and scout launches retain their existing environment prefix, inline settings, model, and effort flags.
+A persistent Claude secondmate instead passes `--settings` the Firstmate-owned `state/<id>.claude-settings.json` artifact, which combines the attribution policy with that secondmate's supervision hooks; Firstmate removes this artifact during aborted setup or teardown and does not use the secondmate home's `.claude/settings.local.json` for it.
 Any other value, or an unreadable file, refuses every spawn from that home, whichever harness it would launch, before any endpoint, worktree, or task record exists, and names the accepted values; Firstmate never falls back to a permission posture the captain did not choose.
 `bin/fm-spawn.sh` reads the file on every spawn and relaunch, so a change takes effect at the next launch without a restart.
 The file is a captain-wide safety preference, so it is inherited into secondmate homes under the [`secondmate-provisioning`](../.agents/skills/secondmate-provisioning/SKILL.md) inherited-local-material contract; a secondmate's own Claude crewmates then launch on the same posture.
@@ -421,6 +422,7 @@ This applies only to agents Firstmate launches; the captain's own primary Firstm
 [`fm-spawn.sh --help`](../bin/fm-spawn.sh) owns the delivery mechanics, with focused regression coverage in [`tests/fm-spawn-compact-adviser-disable.test.sh`](../tests/fm-spawn-compact-adviser-disable.test.sh) and [`tests/fm-spawn-compact-adviser-disable-remote.test.sh`](../tests/fm-spawn-compact-adviser-disable-remote.test.sh).
 
 Every claude launch's inline `--settings` JSON also carries `"attribution":{"commit":"","pr":"","sessionUrl":false}`, so a spawned worker never writes a Co-Authored-By trailer, Claude-Session link, or generated-with line into a commit or PR body regardless of which settings scopes end up loaded.
+For ordinary task-worker and scout launches, that attribution policy is carried in inline `--settings` JSON; persistent secondmates use the Firstmate-owned `state/<id>.claude-settings.json` artifact passed by path.
 
 ## Crew dispatch profiles (config/crew-dispatch.json)
 
