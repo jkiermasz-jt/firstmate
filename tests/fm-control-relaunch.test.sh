@@ -825,8 +825,8 @@ test_secondmate_relaunch_picks_up_the_configured_harness_pin() {
     || fail "the configured model token should come with the pin"
   [ "$(journal_field "$dir" sm3 to_effort)" = high ] \
     || fail "the configured effort token should come with the pin"
-  assert_grep '"user":"settings"' "$dir/smhome/.claude/settings.local.json" \
-    "a secondmate relaunch must preserve its existing Claude settings"
+  jq -e '.user == "settings"' "$dir/smhome/.claude/settings.local.json" >/dev/null 2>&1 \
+    || fail "a secondmate relaunch must preserve its existing Claude settings"
   assert_not_contains "$out" "not a verified harness" "codex is a verified harness"
   pass "fm-control relaunch: a secondmate relaunch re-resolves its durable configured harness pin"
 }

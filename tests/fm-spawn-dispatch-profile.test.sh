@@ -1004,7 +1004,8 @@ test_claude_secondmate_launch_carries_the_attribution_policy() {
   settings="$HOME_DIR/state/$id.claude-settings.json"
   assert_contains "$launch" "--settings '$settings'" \
     "claude secondmate launch did not use its Firstmate-owned settings artifact"
-  assert_attribution_policy "$(cat "$settings")" "claude secondmate"
+  jq -e '.attribution.commit == "" and .attribution.pr == "" and .attribution.sessionUrl == false' "$settings" >/dev/null 2>&1 \
+    || fail "claude secondmate settings artifact has incorrect attribution policy"
   pass "a claude secondmate launch carries the attribution-off policy too"
 }
 
