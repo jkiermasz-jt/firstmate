@@ -312,16 +312,21 @@ test_claude_hooks_stale_incarnation_harmless() {
 }
 
 test_secondmate_claude_hooks_write_parent_busy_state() {
-  local rec id=busy-sm-1 out state settings
+  local rec id=busy-sm-1 out state settings existing_settings
   rec=$(make_secondmate_spawn_case secondmate-claude busy-sm-1)
   read_secondmate_case_record "$rec"
+  mkdir -p "$MATE_HOME/.claude"
+  printf '{"custom":"keep"}\n' > "$MATE_HOME/.claude/settings.local.json"
+  existing_settings=$(cat "$MATE_HOME/.claude/settings.local.json")
   out=$(GROK_HOME="$PRIMARY_HOME/grok-home" FM_FAKE_LAUNCH_LOG="$LAUNCH_LOG" \
     fm_test_run_spawn "$PRIMARY_HOME" "$MATE_HOME" "$FAKEBIN_DIR" --secondmate "$id" "$MATE_HOME" claude)
   expect_code 0 $? "secondmate claude spawn should succeed: $out"
   state="$PRIMARY_HOME/state"
-  settings="$MATE_HOME/.claude/settings.local.json"
+  settings="$state/$id.claude-settings.json"
   assert_present "$state/$id.busy-gen" "a supported secondmate must arm the parent busy generation"
   assert_present "$settings" "a secondmate claude spawn did not write parent-bound hook settings"
+  [ "$(cat "$MATE_HOME/.claude/settings.local.json")" = "$existing_settings" ] \
+    || fail "a secondmate Claude spawn overwrote the home's existing settings"
   assert_grep 'kind=secondmate' "$state/$id.meta" "secondmate metadata was not published in the parent home"
 
   out=$(classify claude "$id" "$state")

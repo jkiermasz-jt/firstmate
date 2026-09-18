@@ -799,6 +799,8 @@ test_secondmate_relaunch_picks_up_the_configured_harness_pin() {
   mkdir -p "$dir/smhome/state" "$dir/smhome/data" "$dir/smhome/bin"
   printf 'sm3\n' > "$dir/smhome/.fm-secondmate-home"
   printf '# agents\n' > "$dir/smhome/AGENTS.md"
+  mkdir -p "$dir/smhome/.claude"
+  printf '{"user":"settings"}\n' > "$dir/smhome/.claude/settings.local.json"
   {
     echo "window=fmses:fm-sm3"
     echo "endpoint_task_id=sm3"
@@ -823,6 +825,8 @@ test_secondmate_relaunch_picks_up_the_configured_harness_pin() {
     || fail "the configured model token should come with the pin"
   [ "$(journal_field "$dir" sm3 to_effort)" = high ] \
     || fail "the configured effort token should come with the pin"
+  assert_grep '"user":"settings"' "$dir/smhome/.claude/settings.local.json" \
+    "a secondmate relaunch must preserve its existing Claude settings"
   assert_not_contains "$out" "not a verified harness" "codex is a verified harness"
   pass "fm-control relaunch: a secondmate relaunch re-resolves its durable configured harness pin"
 }
