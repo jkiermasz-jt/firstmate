@@ -38,6 +38,20 @@ SH
   cat > "$fb/tmux" <<'SH'
 #!/usr/bin/env bash
 case "${1:-}" in
+  list-windows)
+    # The production tmux classifier first inventories the recorded session
+    # before trusting the pane target. Mirror that contract from the fixture's
+    # own metadata instead of making an empty successful inventory look like a
+    # missing window.
+    for meta in "${FM_HOME:-}"/state/*.meta; do
+      [ -f "$meta" ] || continue
+      window=$(sed -n 's/^window=[^:]*:\(.*\)$/\1/p' "$meta" | head -n 1)
+      case "$window" in
+        ''|*dead-*) continue ;;
+        *) printf '%s\n' "$window" ;;
+      esac
+    done
+    ;;
   display-message) case "$*" in *dead-*) exit 1 ;; *) printf '%%1\n' ;; esac ;;
   capture-pane)
     case "$*" in
