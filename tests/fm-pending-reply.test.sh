@@ -1194,6 +1194,51 @@ test_tick_endpoint_cache_is_bound_to_generation() {
   pass "pending-reply endpoint verdicts stay within one generation"
 }
 
+test_tick_observation_cache_is_bound_to_generation() {
+  (
+    local home state open1 open2 old_corr new_corr observation_count
+    home=$(setup_parent observation-generation-cache)
+    state="$home/state"
+    export FM_PENDING_REPLY_NOW=10500
+    open1=$(fm_pending_reply_create "$home" "$state" hibit "old generation")
+    open2=$(fm_pending_reply_create "$home" "$state" hibit "new generation")
+    fm_pending_reply_mark_delivered "$state" "$open1"
+    fm_pending_reply_mark_delivered "$state" "$open2"
+    if [[ "$open1" < "$open2" ]]; then
+      old_corr=$open1
+      new_corr=$open2
+    else
+      old_corr=$open2
+      new_corr=$open1
+    fi
+    fm_write_secondmate_meta "$state/hibit.meta" "$home/hibit" "sess:fm-hibit"
+    printf 'spawn_gen=old-generation\n' >> "$state/hibit.meta"
+    printf '0\n' > "$home/observation-count"
+    fm_backend_agent_state() { printf alive; }
+    fm_backend_busy_state() {
+      local count
+      count=$(cat "$home/observation-count")
+      count=$((count + 1))
+      printf '%s\n' "$count" > "$home/observation-count"
+      if [ "$count" -eq 1 ]; then
+        sed -i.bak 's/^spawn_gen=.*/spawn_gen=new-generation/' "$state/hibit.meta"
+        printf busy
+      else
+        printf idle
+      fi
+    }
+    fm_pending_reply_tick "$state"
+    [ "$(fm_pending_reply_get "$(fm_pending_reply_path "$state" "$old_corr")" turn_seen_busy)" = 1 ] \
+      || fail "the old generation should record its busy observation"
+    [ "$(fm_pending_reply_get "$(fm_pending_reply_path "$state" "$new_corr")" turn_seen_busy)" = 0 ] \
+      || fail "the relaunched generation must not reuse the old busy observation"
+    observation_count=$(cat "$home/observation-count")
+    [ "$observation_count" -eq 2 ] \
+      || fail "distinct endpoint generations must be observed separately, got $observation_count"
+  ) || fail "observation-generation cache regression failed"
+  pass "pending-reply observations stay within one generation"
+}
+
 test_correlations_reuse_only_for_matching_open_task() {
   local dir fb log home state got corr1 corr2 corr3 rec
   dir="$TMP_ROOT/corr-reuse"; mkdir -p "$dir"
@@ -1710,6 +1755,7 @@ test_tick_skips_terminal_and_reuses_target_observation
 test_tick_escalates_confirmed_stopped_secondmate
 test_stopped_remote_secondmate_waits_for_reply_watermark
 test_tick_endpoint_cache_is_bound_to_generation
+test_tick_observation_cache_is_bound_to_generation
 test_correlations_reuse_only_for_matching_open_task
 test_tick_end_to_end_missed_then_escalate
 test_failed_send_discards_undelivered_expectation

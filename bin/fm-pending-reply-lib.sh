@@ -1478,8 +1478,8 @@ fm_pending_reply_tick_one() {  # <state-dir> <corr_id> <busy_state> [secondmate-
 # state, and optional secondmate-home wrong-home path checks.
 fm_pending_reply_tick() {  # <state-dir>
   local state=$1 dir rec corr task_id phase delivered meta backend target label busy sm_home harness remote_host remote_root spawn_gen
-  local observation observation_task endpoint_state endpoint_key cached_endpoint_key found i
-  local -a observation_tasks=() observation_values=() endpoint_keys=() endpoint_values=()
+  local observation observation_key endpoint_state endpoint_key cached_endpoint_key cached_observation_key found i
+  local -a observation_keys=() observation_values=() endpoint_keys=() endpoint_values=()
   dir=$(fm_pending_reply_dir "$state")
   [ -d "$dir" ] || return 0
   for rec in "$dir"/*; do
@@ -1593,9 +1593,9 @@ fm_pending_reply_tick() {  # <state-dir>
         esac
         observation=
         found=0
-        for ((i = 0; i < ${#observation_tasks[@]}; i++)); do
-          observation_task=${observation_tasks[$i]}
-          [ "$observation_task" = "$task_id" ] || continue
+        for ((i = 0; i < ${#observation_keys[@]}; i++)); do
+          cached_observation_key=${observation_keys[$i]}
+          [ "$cached_observation_key" = "$endpoint_key" ] || continue
           observation=${observation_values[$i]}
           found=1
           break
@@ -1608,7 +1608,7 @@ fm_pending_reply_tick() {  # <state-dir>
           else
             observation=$(fm_pending_reply_backend_observation "$backend" "$target" "$label" "$harness")
           fi
-          observation_tasks+=("$task_id")
+          observation_keys+=("$endpoint_key")
           observation_values+=("$observation")
         fi
         busy=$(fm_pending_reply_busy_state_from_observation "$rec" "$observation")
