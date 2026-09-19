@@ -948,6 +948,7 @@ test_unknown_backend_state_uses_capture_fallback() {
       mkdir -p "$sm_home/state"
       if [ "$backend" = tmux ]; then
         fb=$(make_stubs "$home")
+        # shellcheck disable=SC2030,SC2031
         export PATH="$fb:$PATH" FM_FAKE_TMUX_WINDOW_NAME=fm-hibit
       fi
       export FM_PENDING_REPLY_GRACE_SECS=10
@@ -997,6 +998,7 @@ test_kimi_capture_fallback_uses_recorded_harness() (
   sm_home="$home/sm"
   mkdir -p "$sm_home/state"
   fb=$(make_stubs "$home")
+  # shellcheck disable=SC2030,SC2031
   export PATH="$fb:$PATH" FM_FAKE_TMUX_WINDOW_NAME=fm-hibit
   # This fixture clock is intentionally scoped to the isolated subshell.
   # shellcheck disable=SC2030,SC2031
@@ -1029,6 +1031,7 @@ test_tick_skips_terminal_and_reuses_target_observation() {
     home=$(setup_parent observation-cache)
     state="$home/state"
     fb=$(make_stubs "$home")
+    # shellcheck disable=SC2030,SC2031
     export PATH="$fb:$PATH" FM_FAKE_TMUX_WINDOW_NAME=fm-hibit
     probe_log="$home/backend-probes.log"
     scan_log="$home/status-scans.log"
@@ -1107,6 +1110,7 @@ test_tick_escalates_confirmed_stopped_secondmate() (
   corr=$(fm_pending_reply_create "$home" "$state" hibit "inspect the release")
   fm_pending_reply_mark_delivered "$state" "$corr"
   fm_write_secondmate_meta "$state/hibit.meta" "$sm_home" "sess:fm-hibit"
+  # shellcheck disable=SC2329
   fm_backend_agent_state() { printf dead; }
   fm_pending_reply_tick "$state" || fail "stopped secondmate tick should succeed"
   [ "$(phase_of "$state" "$corr")" = escalated ] \
@@ -1123,6 +1127,7 @@ test_stopped_remote_secondmate_waits_for_reply_watermark() {
   fm_write_meta "$state/ios.meta" \
     "window=fm-remote:w1:p1" "harness=claude" "kind=secondmate" "mode=secondmate" \
     "remote_host=remote-mac" "remote_root=/remote/root" "remote_backend=herdr"
+  # shellcheck disable=SC2030,SC2031
   export FM_PENDING_REPLY_NOW=10300
   corr=$(fm_pending_reply_create "$home" "$state" ios "inspect the release")
   fm_pending_reply_mark_delivered "$state" "$corr"
@@ -1154,6 +1159,7 @@ test_tick_endpoint_cache_is_bound_to_generation() {
     local home state open1 open2 old_corr new_corr probe_count
     home=$(setup_parent endpoint-generation-cache)
     state="$home/state"
+    # shellcheck disable=SC2030,SC2031
     export FM_PENDING_REPLY_NOW=10400
     open1=$(fm_pending_reply_create "$home" "$state" hibit "old generation")
     open2=$(fm_pending_reply_create "$home" "$state" hibit "new generation")
@@ -1169,6 +1175,7 @@ test_tick_endpoint_cache_is_bound_to_generation() {
     fm_write_secondmate_meta "$state/hibit.meta" "$home/hibit" "sess:fm-hibit"
     printf 'spawn_gen=old-generation\n' >> "$state/hibit.meta"
     printf '0\n' > "$home/probe-count"
+    # shellcheck disable=SC2329
     fm_backend_agent_state() {
       local count
       count=$(cat "$home/probe-count")
@@ -1181,6 +1188,7 @@ test_tick_endpoint_cache_is_bound_to_generation() {
         printf 'alive'
       fi
     }
+    # shellcheck disable=SC2329
     fm_backend_busy_state() { printf 'busy'; }
     fm_pending_reply_tick "$state"
     [ "$(phase_of "$state" "$old_corr")" = escalated ] \
@@ -1199,6 +1207,7 @@ test_tick_observation_cache_is_bound_to_generation() {
     local home state open1 open2 old_corr new_corr observation_count
     home=$(setup_parent observation-generation-cache)
     state="$home/state"
+    # shellcheck disable=SC2030,SC2031
     export FM_PENDING_REPLY_NOW=10500
     open1=$(fm_pending_reply_create "$home" "$state" hibit "old generation")
     open2=$(fm_pending_reply_create "$home" "$state" hibit "new generation")
@@ -1214,7 +1223,9 @@ test_tick_observation_cache_is_bound_to_generation() {
     fm_write_secondmate_meta "$state/hibit.meta" "$home/hibit" "sess:fm-hibit"
     printf 'spawn_gen=old-generation\n' >> "$state/hibit.meta"
     printf '0\n' > "$home/observation-count"
+    # shellcheck disable=SC2329
     fm_backend_agent_state() { printf alive; }
+    # shellcheck disable=SC2329
     fm_backend_busy_state() {
       local count
       count=$(cat "$home/observation-count")

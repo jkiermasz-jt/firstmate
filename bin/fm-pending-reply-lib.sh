@@ -1477,7 +1477,7 @@ fm_pending_reply_tick_one() {  # <state-dir> <corr_id> <busy_state> [secondmate-
 # state, and optional secondmate-home wrong-home path checks.
 fm_pending_reply_tick() {  # <state-dir>
   local state=$1 dir rec corr task_id phase delivered meta backend target label busy sm_home harness remote_host remote_root spawn_gen
-  local observation observation_key endpoint_state endpoint_key cached_endpoint_key cached_observation_key found i
+  local observation endpoint_state endpoint_key cached_endpoint_key cached_observation_key found i
   local -a observation_keys=() observation_values=() endpoint_keys=() endpoint_values=()
   dir=$(fm_pending_reply_dir "$state")
   [ -d "$dir" ] || return 0
