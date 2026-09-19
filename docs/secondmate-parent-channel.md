@@ -45,6 +45,7 @@ Only a recovery-grade `dead` or `missing` result changes that conclusion; ambigu
 The pending-reply tick is the narrow mid-session exception: local routes use the recovery-grade endpoint classifier, while remote routes use their host-local control boundary.
 An unresolved remote reply remains unknown until its reply mirror watermark reaches the completed turn, even when the endpoint has stopped.
 An unresolved routed reply on a confirmed stopped endpoint is escalated as `pending-reply-agent-stopped`, so the parent receives a durable terminal boundary instead of waiting on a child that can no longer report.
+That stopped-endpoint verdict is bound to the sampled `spawn_gen` and revalidated before publication, so a relaunch suppresses the old generation's escalation instead of classifying the replacement as stopped.
 `tests/fm-crew-state.test.sh` and `tests/fm-pending-reply.test.sh` cover this boundary.
 
 ## What is deliberately not built
