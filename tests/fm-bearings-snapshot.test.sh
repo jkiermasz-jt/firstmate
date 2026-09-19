@@ -745,7 +745,7 @@ test_secondmate_and_child_bounds_are_disclosed() {
 }
 
 test_read_only_secondmate_cap_keeps_local_records() {
-  local home mate remote_home fakebin canonical
+  local home mate remote_home fakebin canonical bearings_json
   home=$(make_home read-only-secondmate-cap)
   mate="$TMP_ROOT/read-only-secondmate-cap-home"
   make_valid_secondmate_home z-local "$mate"
@@ -774,12 +774,61 @@ EOF
   canonical=$(PATH="$fakebin:$PATH" FM_HOME="$home" FM_SNAPSHOT_SKIP_REMOTE=1 \
     FM_SNAPSHOT_SECONDMATES=1 "$ROOT/bin/fm-fleet-snapshot.sh" --json)
   printf '%s' "$canonical" | jq -e '
-    .secondmate_current.remote_skipped == 1
+    .secondmate_current.total == 2
+      and .secondmate_current.remote_skipped == 1
       and .secondmate_current.shown == 1
+      and .secondmate_current.truncated == 0
       and (.secondmate_current.records | any(.id == "z-local"
         and (.active_children | any(.id == "child"))))
   ' >/dev/null || fail "read-only secondmate cap crowded out local activity: $canonical"
+  bearings_json=$(PATH="$fakebin:$PATH" FM_HOME="$home" FM_SNAPSHOT_SKIP_REMOTE=1 \
+    FM_SNAPSHOT_SECONDMATES=1 "$ROOT/bin/fm-bearings-snapshot.sh" --json)
+  printf '%s' "$bearings_json" | jq -e '
+    .contributions.complete == false
+      and .contributions.proven_clear == false
+      and (.omitted | any(.surface | test("remote secondmates omitted by snapshot configuration: 1")))
+  ' >/dev/null || fail "remote secondmates omission was not disclosed or spoiled completeness: $bearings_json"
   pass "read-only secondmate bounds preserve local activity ahead of remote records"
+}
+
+test_blocked_in_flight_child_is_captured_in_holds_and_bearings() {
+  local home mate fakebin canonical bearings_json
+  home=$(make_home blocked-child-hold)
+  mate="$TMP_ROOT/blocked-child-hold-home"
+  make_valid_secondmate_home blockedmate "$mate"
+  append_secondmate_registry "$home" blockedmate "$mate"
+  mkdir -p "$mate/projects/child"
+  cat > "$mate/data/backlog.md" <<'EOF'
+## In flight
+- [ ] child - In flight child (repo: sample) (kind: ship) (since 2026-07-11)
+
+## Queued
+
+## Done
+EOF
+  fm_write_meta "$mate/state/child.meta" \
+    "window=firstmate:fm-child" "worktree=$mate/projects/child" "project=sample" \
+    "harness=claude" "kind=ship" "mode=no-mistakes"
+  record_claude_state "$mate/state" child idle
+  printf 'blocked: waiting on upstream dependency\n' > "$mate/state/child.status"
+  fakebin=$(make_fakebin "$home")
+  refresh_local_secondmate_ledgers "$home"
+  canonical=$(PATH="$fakebin:$PATH" FM_HOME="$home" FM_SNAPSHOT_NOW=2026-07-11T18:00:00Z \
+    "$ROOT/bin/fm-fleet-snapshot.sh" --json)
+  printf '%s' "$canonical" | jq -e '
+    .secondmate_current.records[] | select(.id == "blockedmate")
+    | .current.state == "externally_held"
+      and .active_children == []
+      and (.holds | any(.id == "child" and .source == "child-state" and (.reason | contains("waiting on upstream dependency"))))
+  ' >/dev/null || fail "blocked in-flight child was not captured in holds: $canonical"
+  bearings_json=$(PATH="$fakebin:$PATH" FM_HOME="$home" FM_SNAPSHOT_NOW=2026-07-11T18:00:00Z \
+    "$ROOT/bin/fm-bearings-snapshot.sh" --json)
+  printf '%s' "$bearings_json" | jq -e '
+    .secondmates[] | select(.id == "blockedmate")
+    | .state == "externally_held"
+      and (.doing | contains("child: waiting on upstream dependency"))
+  ' >/dev/null || fail "blocked in-flight child did not reach bearings secondmate view: $bearings_json"
+  pass "blocked in-flight child work is captured in holds and bearings"
 }
 
 test_parent_decision_is_untrusted_contradiction_only() {
@@ -3383,6 +3432,8 @@ test_structured_child_decision_reaches_captains_call
 test_bad_secondmate_homes_never_revive_parent_work
 test_oversized_secondmate_summary_stays_strict_unknown
 test_secondmate_and_child_bounds_are_disclosed
+test_read_only_secondmate_cap_keeps_local_records
+test_blocked_in_flight_child_is_captured_in_holds_and_bearings
 test_parent_decision_is_untrusted_contradiction_only
 test_parent_evidence_reconciles_by_verb_and_key
 test_nonprogressing_child_states_are_explicit

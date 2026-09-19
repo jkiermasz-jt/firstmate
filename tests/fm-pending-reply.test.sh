@@ -1110,6 +1110,7 @@ test_tick_escalates_confirmed_stopped_secondmate() (
   corr=$(fm_pending_reply_create "$home" "$state" hibit "inspect the release")
   fm_pending_reply_mark_delivered "$state" "$corr"
   fm_write_secondmate_meta "$state/hibit.meta" "$sm_home" "sess:fm-hibit"
+  printf 'spawn_gen=gen-1\n' >> "$state/hibit.meta"
   # shellcheck disable=SC2329
   fm_backend_agent_state() { printf dead; }
   fm_pending_reply_tick "$state" || fail "stopped secondmate tick should succeed"
@@ -1191,10 +1192,12 @@ test_tick_endpoint_cache_is_bound_to_generation() {
     # shellcheck disable=SC2329
     fm_backend_busy_state() { printf 'busy'; }
     fm_pending_reply_tick "$state"
-    [ "$(phase_of "$state" "$old_corr")" = escalated ] \
-      || fail "the stopped old generation should escalate"
+    [ "$(phase_of "$state" "$old_corr")" = awaiting_report ] \
+      || fail "a stopped verdict from an old generation must not escalate once a new generation is live"
     [ "$(phase_of "$state" "$new_corr")" = awaiting_report ] \
       || fail "the live replacement generation must not reuse the old stopped verdict"
+    ! grep -q "pending-reply-agent-stopped" "$state/hibit.status" 2>/dev/null \
+      || fail "stopped-endpoint escalation must not be published for a live replacement"
     probe_count=$(cat "$home/probe-count")
     [ "$probe_count" -eq 2 ] \
       || fail "distinct endpoint generations must be probed separately, got $probe_count"

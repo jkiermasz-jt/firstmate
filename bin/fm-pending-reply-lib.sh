@@ -1277,7 +1277,7 @@ _fm_pending_reply_publish_escalation_locked() {  # <state-dir> <corr_id> <kind>
   return 0
 }
 
-fm_pending_reply_escalate_agent_stopped() {  # <state-dir> <corr_id>
+fm_pending_reply_escalate_agent_stopped() {  # <state-dir> <corr_id> [<expected_spawn_gen>]
   local state=$1 corr=$2 lock rc=0
   local STATE FM_WAKE_QUEUE FM_WAKE_QUEUE_LOCK
   STATE=$state
@@ -1289,9 +1289,9 @@ fm_pending_reply_escalate_agent_stopped() {  # <state-dir> <corr_id>
   return "$rc"
 }
 
-_fm_pending_reply_escalate_agent_stopped_locked() {  # <state-dir> <corr_id>
-  local state=$1 corr=$2 rec phase
-  local completed task_id
+_fm_pending_reply_escalate_agent_stopped_locked() {  # <state-dir> <corr_id> [<expected_spawn_gen>]
+  local state=$1 corr=$2 expected_spawn_gen=${3:-} rec phase
+  local completed task_id meta current_spawn_gen
   rec=$(fm_pending_reply_path "$state" "$corr")
   [ -f "$rec" ] || return 1
   phase=$(fm_pending_reply_get "$rec" phase)
@@ -1300,6 +1300,13 @@ _fm_pending_reply_escalate_agent_stopped_locked() {  # <state-dir> <corr_id>
     return 0
   fi
   task_id=$(fm_pending_reply_get "$rec" task_id)
+  meta="$state/${task_id}.meta"
+  if [ $# -ge 3 ] && [ -f "$meta" ]; then
+    current_spawn_gen=$(fm_meta_get "$meta" spawn_gen)
+    if [ "$current_spawn_gen" != "$expected_spawn_gen" ]; then
+      return 0
+    fi
+  fi
   if fm_pending_reply_target_is_remote "$state" "$task_id"; then
     case "$phase" in
       awaiting_report) completed=$(fm_pending_reply_get "$rec" request_turn_completed_epoch) ;;
@@ -1586,7 +1593,7 @@ fm_pending_reply_tick() {  # <state-dir>
         fi
         case "$endpoint_state" in
           dead|missing)
-            fm_pending_reply_escalate_agent_stopped "$state" "$corr" || true
+            fm_pending_reply_escalate_agent_stopped "$state" "$corr" "$spawn_gen" || true
             continue
             ;;
         esac

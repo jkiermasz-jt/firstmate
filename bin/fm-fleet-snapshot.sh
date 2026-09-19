@@ -1064,7 +1064,7 @@ secondmate_home_summary_json() {  # <backlog-json-file> <tasks-json-file>
             hold_kind:(.hold_kind // null),source:"backlog"} ]
        + [ $owned_in_flight[] as $work
            | $tasks[]
-           | select(.id == $work.id and (.current_state.state == "parked" or .current_state.state == "paused"))
+           | select(.id == $work.id and (.current_state.state == "parked" or .current_state.state == "paused" or .current_state.state == "blocked"))
            | select(($work.hold_reason != null and $work.hold_kind != null) | not)
            | {id,title:((.backlog.title // .id) | trunc(90)),blocked_by:null,
               blocked_by_ids:[],unresolved_blocker_ids:[],
@@ -1750,14 +1750,14 @@ secondmate_current_json() {  # <parent-tasks-json-file> <output-file>
   all_total=$(jq '.records | length' "$union_file")
   if [ "$FM_SNAPSHOT_SKIP_REMOTE" -eq 1 ]; then
     remote_skipped=$(jq '[.records[] | select(.remote == true)] | length' "$union_file")
-    total=$((all_total - remote_skipped))
+    total=$all_total
     rows=$(jq -c --argjson cap "$FM_SNAPSHOT_SECONDMATES" '([.records[] | select(.remote != true)] | if $cap == 0 then . else .[:$cap] end)[]' "$union_file")
   else
     total=$all_total
     rows=$(jq -c --argjson cap "$FM_SNAPSHOT_SECONDMATES" '(if $cap == 0 then .records else .records[:$cap] end)[]' "$union_file")
   fi
   shown=$(printf '%s\n' "$rows" | grep -c . || true)
-  truncated=$((total - shown))
+  truncated=$((all_total - remote_skipped - shown))
   : > "$records_file"
   if [ -n "$rows" ] && [ "$FM_SNAPSHOT_SKIP_REMOTE" -eq 0 ]; then
     prepare_remote_summary_collection "$rows" || return 1
