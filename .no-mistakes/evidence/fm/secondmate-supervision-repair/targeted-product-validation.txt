@@ -1,0 +1,20 @@
+Targeted product validation for 957a6723c81522991eee3f460a8fb1239e4a3966
+
+Commands:
+- bash tests/fm-pending-reply.test.sh
+- bash tests/fm-bearings-snapshot.test.sh
+- bash tests/fm-crew-state.test.sh
+- focused fm-session-start acceptance functions
+
+Acceptance evidence:
+ok - pending-reply endpoint verdicts stay within one generation
+ok - pending-reply observations stay within one generation
+ok - stopped remote pending replies wait for the reply-channel watermark
+ok - read-only secondmate bounds preserve local activity ahead of remote records
+ok - blocked in-flight child work is captured in holds and bearings
+ok - readable terminal endpoints reconcile stale progress while preserving terminal/blocker outcomes and healthy idle secondmates
+ok - session start: a read-only session declares its skipped network checks rather than dropping them
+ok - session start presents current activity only from the canonical snapshot and keeps stale records as history
+ok - session start renders canonical decision and hold activity surfaces
+ok - session start bounds the canonical current-activity snapshot
+ok - session start forwards the projects override to the canonical snapshot
